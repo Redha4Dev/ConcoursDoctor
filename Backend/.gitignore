@@ -1,0 +1,44 @@
+# ─── Dependencies ───────────────────────────────
+node_modules/
+
+# ─── Build output ───────────────────────────────
+dist/
+build/
+
+# ─── Environment variables ──────────────────────
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# ─── Logs ───────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+
+# ─── Prisma generated clients ───────────────────
+src/generated/
+prisma/generated/
+
+# ─── OS files ───────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE / Editor ───────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Uploads / temp files ───────────────────────
+uploads/
+tmp/
+temp/
+
+# ─── Coverage & test output ─────────────────────
+coverage/
+.nyc_output/
+
+# ─── TypeScript cache ───────────────────────────
+*.tsbuildinfo
