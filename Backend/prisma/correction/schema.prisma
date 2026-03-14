@@ -1,0 +1,15 @@
+// prisma/correction/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/correction" // Changed this line
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Correction {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+}
