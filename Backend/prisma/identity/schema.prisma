@@ -1,0 +1,276 @@
+// prisma/identity/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/identity" // Changed this line
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ────────────────────────────────────
+
+enum Role {
+  ADMIN
+  COORDINATOR
+  SURVEILLANT
+  CORRECTOR
+  JURY_MEMBER
+  AUDITOR
+}
+
+enum SessionStatus {
+  DRAFT
+  OPEN
+  ATTENDANCE_LOCKED
+  ANONYMIZED
+  CORRECTION_OPEN
+  DELIBERATION
+  CLOSED
+  ARCHIVED
+}
+
+enum CandidateStatus {
+  REGISTERED
+  VALID
+  INVALID
+}
+
+enum ImportSource {
+  CSV
+  EXCEL
+  API
+  MANUAL
+}
+
+// ─── USERS ────────────────────────────────────
+
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String    @unique
+  passwordHash       String
+  role               Role
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  lastLogin          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  createdBy          String?
+
+  coordinatorProfile CoordinatorProfile?
+  surveillantProfile SurveillantProfile?
+  correctorProfile   CorrectorProfile?
+  juryMemberProfile  JuryMemberProfile?
+  auditorProfile     AuditorProfile?
+
+  auditLogs           AuditLog[]
+  formationStaff      FormationStaff[]
+  coordinatedSessions CompetitionSession[]
+  importBatches       ImportBatch[]
+
+  @@map("users")
+}
+
+model CoordinatorProfile {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  department  String?
+  phoneNumber String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("coordinator_profiles")
+}
+
+model SurveillantProfile {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  phoneNumber String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("surveillant_profiles")
+}
+
+model CorrectorProfile {
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  specialization String?
+  academicGrade  String?
+  institution    String?
+  isAvailable    Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("corrector_profiles")
+}
+
+model JuryMemberProfile {
+  id           String  @id @default(uuid())
+  userId       String  @unique
+  academicRank String?
+  institution  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("jury_member_profiles")
+}
+
+model AuditorProfile {
+  id     String  @id @default(uuid())
+  userId String  @unique
+  scope  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auditor_profiles")
+}
+
+// ─── AUDIT LOG ────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String?
+  ipAddress String?
+  userAgent String?
+  payload   Json?
+  timestamp DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ─── DOCTORAL FORMATION ───────────────────────
+
+model DoctoralFormation {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  department  String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  createdBy   String
+
+  staff    FormationStaff[]
+  sessions CompetitionSession[]
+
+  @@map("doctoral_formations")
+}
+
+model FormationStaff {
+  id          String   @id @default(uuid())
+  formationId String
+  userId      String
+  role        Role
+  assignedAt  DateTime @default(now())
+  assignedBy  String
+
+  formation DoctoralFormation @relation(fields: [formationId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+
+  @@unique([formationId, userId, role])
+  @@map("formation_staff")
+}
+
+// ─── COMPETITION SESSION ──────────────────────
+
+model CompetitionSession {
+  id                 String        @id @default(uuid())
+  formationId        String
+  coordinatorId      String
+  academicYear       String
+  label              String
+  status             SessionStatus @default(DRAFT)
+  availableSlots     Int
+  examDate           DateTime
+  examRoom           String?
+  attendanceDeadline DateTime?
+  correctionDeadline DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  formation     DoctoralFormation @relation(fields: [formationId], references: [id])
+  coordinator   User              @relation(fields: [coordinatorId], references: [id])
+  subjects      Subject[]
+  gradingConfig GradingConfig?
+  candidates    Candidate[]
+  importBatches ImportBatch[]
+
+  @@map("competition_sessions")
+}
+
+model Subject {
+  id           String  @id @default(uuid())
+  sessionId    String
+  name         String
+  coefficient  Float
+  maxGrade     Float   @default(20)
+  minimumGrade Float   @default(10)
+  description  String?
+
+  session CompetitionSession @relation(fields: [sessionId], references: [id])
+
+  @@map("subjects")
+}
+
+model GradingConfig {
+  id                   String   @id @default(uuid())
+  sessionId            String   @unique
+  discrepancyThreshold Float    @default(3)
+  configuredAt         DateTime @default(now())
+  configuredBy         String
+
+  session CompetitionSession @relation(fields: [sessionId], references: [id])
+
+  @@map("grading_configs")
+}
+
+// ─── CANDIDATES ───────────────────────────────
+
+model Candidate {
+  id                 String          @id @default(uuid())
+  sessionId          String
+  registrationNumber String
+  firstName          String
+  lastName           String
+  email              String?
+  phoneNumber        String?
+  nationalId         String?
+  degreeTitle        String?
+  degreeInstitution  String?
+  graduationYear     Int?
+  status             CandidateStatus @default(REGISTERED)
+  importBatchId      String?
+  importedAt         DateTime        @default(now())
+
+  session     CompetitionSession @relation(fields: [sessionId], references: [id])
+  importBatch ImportBatch?       @relation(fields: [importBatchId], references: [id])
+
+  @@unique([sessionId, registrationNumber])
+  @@map("candidates")
+}
+
+model ImportBatch {
+  id               String       @id @default(uuid())
+  sessionId        String
+  importedBy       String
+  source           ImportSource
+  fileName         String?
+  totalRecords     Int
+  validRecords     Int
+  invalidRecords   Int
+  validationErrors Json?
+  importedAt       DateTime     @default(now())
+
+  session        CompetitionSession @relation(fields: [sessionId], references: [id])
+  importedByUser User               @relation(fields: [importedBy], references: [id])
+  candidates     Candidate[]
+
+  @@map("import_batches")
+}
