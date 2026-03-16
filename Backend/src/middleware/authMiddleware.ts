@@ -1,47 +1,60 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/AppError.js";
+import { identityDb } from "../config/db.js";
 
-export interface AuthRequest extends Request {
-  user?: { id: string; role: string };
-}
-
-export const protect = (
-  req: AuthRequest,
-  res: Response,
+export const protect = async (
+  req: Request,
+  _res: Response,
   next: NextFunction,
 ) => {
   try {
-    let token;
+    let token: string | undefined;
 
-    // 1. Check for cookie
-    if (req.cookies && req.cookies.jwt) {
+    if (req.cookies?.jwt) {
       token = req.cookies.jwt;
-    }
-    // 2. Fallback to Bearer token header
-    else if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer")
-    ) {
+    } else if (req.headers.authorization?.startsWith("Bearer")) {
       token = req.headers.authorization.split(" ")[1];
     }
 
     if (!token) {
-      throw new AppError(
-        "You are not logged in. Please log in to get access.",
-        401,
-      );
+      return next(new AppError("You are not logged in", 401));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       id: string;
       role: string;
+      name: string;
+      email: string;
     };
 
-    req.user = decoded;
+    // ← ADD: check user still exists and is active
+    const user = await identityDb.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      return next(new AppError("User no longer exists or is inactive", 401));
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+
     next();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (error) {
-    next(new AppError("Invalid or expired token.", 401));
+  } catch {
+    next(new AppError("Invalid or expired token", 401));
   }
 };
