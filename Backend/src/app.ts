@@ -9,6 +9,7 @@ import swaggerUi from "swagger-ui-express";
 import YAML from "yaml";
 import fs from "fs";
 import path from "path";
+import authRouter from "./modules/auth/auth.router.js";
 
 const openApiPath = path.join(process.cwd(), "src/docs/openapi.yaml");
 const openApiFile = fs.readFileSync(openApiPath, "utf8");
@@ -27,6 +28,8 @@ app.use(
 );
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
+
+app.use("/api/v1/auth", authRouter);
 app.use(errorHandler);
 
 export default app;
