@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import axios from "axios";
+import { api } from "@/lib/api";
 
 type AuthContextType = {
   user: any;
@@ -22,7 +23,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      const res = await axios.get("/api/v1/auth/me", { withCredentials: true });
+      const res = await api.get("/api/v1/auth/me", { withCredentials: true });
       setUser(res.data);
     } catch {
       setUser(null);
@@ -31,7 +32,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const login = async (email: string, password: string) => {
-    await axios.post(
+    await api.post(
       "/api/v1/auth/login",
       { email, password },
       { withCredentials: true },
@@ -41,7 +42,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const logout = async () => {
-    await axios.post("/api/logout", {}, { withCredentials: true });
+    await api.post("/api/v1/auth/logout", {}, { withCredentials: true });
     setUser(null);
   };
 

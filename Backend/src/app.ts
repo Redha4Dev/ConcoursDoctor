@@ -10,6 +10,7 @@ import YAML from "yaml";
 import fs from "fs";
 import path from "path";
 import authRouter from "./modules/auth/auth.router.js";
+import "dotenv/config";
 
 const openApiPath = path.join(process.cwd(), "src/docs/openapi.yaml");
 const openApiFile = fs.readFileSync(openApiPath, "utf8");
@@ -18,7 +19,10 @@ const openApiSpec = YAML.parse(openApiFile);
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin:     process.env.FRONTEND_URL  || "http://localhost:3000",
+  credentials: true
+}))
 app.use(express.json());
 app.use(cookieParser());
 app.use(
