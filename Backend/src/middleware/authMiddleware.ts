@@ -2,9 +2,24 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/AppError.js";
 import { identityDb } from "../config/db.js";
+import type { Role } from "../generated/identity/client.js";
+
+// 1. Define the User payload interface
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: Role; // Using the Prisma Enum here is better for RBAC
+  firstName: string;
+  lastName: string;
+}
+
+// 2. Extend the Express Request type
+export interface AuthRequest extends Request {
+  user?: AuthUser;
+}
 
 export const protect = async (
-  req: Request,
+  req: AuthRequest, // Use AuthRequest here
   _res: Response,
   next: NextFunction,
 ) => {
@@ -24,11 +39,8 @@ export const protect = async (
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       id: string;
       role: string;
-      name: string;
-      email: string;
     };
 
-    // ← ADD: check user still exists and is active
     const user = await identityDb.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -45,16 +57,18 @@ export const protect = async (
       return next(new AppError("User no longer exists or is inactive", 401));
     }
 
+    // Attach user to request
     req.user = {
       id: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as Role,
       firstName: user.firstName,
       lastName: user.lastName,
     };
 
     next();
-  } catch {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (error) {
     next(new AppError("Invalid or expired token", 401));
   }
 };

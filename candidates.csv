@@ -1,0 +1,5 @@
+registrationNumber,firstName,lastName,email,phoneNumber,nationalId,degreeTitle,degreeInstitution,graduationYear
+2026001,Ahmed,Benali,ahmed@email.com,0555123456,12345678901,Master Informatique,USTHB,2024
+2026002,Sara,Meziane,sara@email.com,0666789012,98765432109,Master Informatique,ESI,2024
+2026003,Mohamed,Kaci,mohamed@email.com,0777345678,11122334455,Master Informatique,USTO,2023
+2026004,Lina,Hamdi,,0888456789,,Master Informatique,USTHB,2024
