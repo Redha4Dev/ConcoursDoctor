@@ -1,172 +1,139 @@
 "use client";
 
 import React, { useState } from "react";
-import axios from "axios";
-import { Lock, Mail, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { User, Lock, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 
 export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
+  const togglePasswordVisibility = () => setShowPassword(!showPassword);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-
     setLoading(true);
     setError("");
 
     try {
-      await api.post("/api/v1/auth/login", {
-        email,
-        password,
-      });
-
-      
+      await api.post("/api/v1/auth/login", { email, password });
       window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err?.response?.data?.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen w-full bg-[#F6F6F8] overflow-hidden isolate">
-      <div className="absolute -left-24 -top-24 w-96 h-96 bg-[#3014B8] opacity-5 blur-[32px] rounded-[12px] z-0" />
-      <div className="absolute -right-24 -bottom-24 w-96 h-96 bg-[#3014B8] opacity-5 blur-[32px] rounded-[12px] z-0" />
-
-      <main className="relative z-10 flex flex-col items-center justify-center w-full max-w-[480px] bg-white shadow-[6px_6px_24px_rgba(0,0,0,0.16)] backdrop-blur-[7.6px] rounded-[12px] overflow-hidden">
-        <header className="flex flex-col items-center pt-10 pb-6 w-full border-b border-white">
-          <div className="mb-4 p-3 bg-[#3014B8]/10 rounded-[12px]">
-            <ShieldCheck className="w-8 h-7 text-[#3014B8]" />
-          </div>
-
-          <h1 className="font-bold text-[18px] text-[#0F172A] text-center px-6">
-            Ph.D. Contest Management
-          </h1>
-
-          <p className="mt-1 text-[14px] text-[#64748B]">
+    <div className="min-h-screen font-sans  bg-[#F4F7FF] flex flex-col justify-center items-center p-4 selection:bg-[#3014B8]/20">
+      
+      {/* Login Card */}
+      <main className="w-full max-w-[440px] bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.04)] p-10 z-10">
+        
+        {/* Header/Logo */}
+        <header className="flex flex-col items-center mb-10">
+          <img 
+            src="/LogoDoctora.svg" 
+            alt="ConcourDoctora" 
+            className="h-14 object-contain mb-2"
+          />
+          <p className="text-[13px] text-slate-400 font-medium tracking-wide">
             Administrator Secure Access Portal
           </p>
         </header>
 
-        <div className="flex flex-col gap-8 p-8 w-full">
-          <form className="flex flex-col gap-6" onSubmit={handleLogin}>
-            {/* Email */}
-            <div className="flex flex-col gap-2">
-              <label className="font-bold text-[14px] text-[#0F172A]">
-                Username or Email
-              </label>
-
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                  <Mail className="h-4 w-4 text-[#64748B]" />
-                </span>
-
-                <input
-                  type="text"
-                  placeholder="Enter your credentials"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-[49px] pl-10 pr-3 bg-white border-[1.5px] border-[#3014B8]/10 rounded-[12px] text-[14px] text-[#0F172A] focus:outline-none focus:border-[#3014B8]"
-                />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div className="flex flex-col gap-2">
-              <label className="font-bold text-[14px] text-[#0F172A]">
-                Password
-              </label>
-
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                  <Lock className="h-4 w-4 text-[#64748B]" />
-                </span>
-
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full h-[49px] px-10 bg-white border border-[#3014B8]/10 rounded-[12px] text-[16px] text-[#64748B] focus:outline-none focus:border-[#3014B8]"
-                />
-
-                <button
-                  type="button"
-                  onClick={togglePasswordVisibility}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-[#64748B]" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-[#64748B]" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Error */}
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-
-            {/* Remember */}
-            <div className="flex justify-between items-center">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 accent-[#3014B8]" />
-                <span className="text-[14px] text-[#64748B]">Remember me</span>
-              </label>
-
-              <a href="#" className="font-bold text-[14px] text-[#3014B8]">
-                Forgot Password?
-              </a>
-            </div>
-
-            {/* Button */}
-            <button
-              disabled={loading}
-              className="w-full h-[48px] bg-[#3014B8] text-white font-bold text-[16px] rounded-[32px] hover:bg-[#261096]"
-            >
-              {loading ? "Logging in..." : "Log In"}
-            </button>
-          </form>
-
-          <div className="pt-6 border-t border-[#F6F6F8] flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-[10px] h-[10px] text-[#64748B]" />
-              <span className="text-[12px] text-[#64748B] uppercase">
-                Secure Encryption
-              </span>
+        <form onSubmit={handleLogin} className="flex flex-col gap-5">
+          {/* Username/Email */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[13px] font-bold text-slate-800">
+              Username or Email
+            </label>
+            <div className="relative group">
+              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[16px] h-[16px] text-slate-400 group-focus-within:text-[#3014B8] transition-colors" />
+              <input
+                type="text"
+                placeholder="Enter your credentials"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full h-12 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[#3014B8] focus:ring-1 focus:ring-[#3014B8]/10 transition-all"
+                required
+              />
             </div>
           </div>
-        </div>
+
+          {/* Password */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[13px] font-bold text-slate-800">
+              Password
+            </label>
+            <div className="relative group">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[16px] h-[16px] text-slate-400 group-focus-within:text-[#3014B8] transition-colors" />
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full h-12 px-10 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-[#3014B8] focus:ring-1 focus:ring-[#3014B8]/10 transition-all"
+                required
+              />
+              <button
+                type="button"
+                onClick={togglePasswordVisibility}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {error && <p className="text-red-500 text-xs font-medium">{error}</p>}
+
+          {/* Remember & Forgot */}
+          <div className="flex justify-between items-center mt-1">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 rounded border-slate-300 text-[#3014B8] focus:ring-[#3014B8] cursor-pointer transition-all" 
+              />
+              <span className="text-sm text-slate-500 group-hover:text-slate-700 transition-colors">Remember me</span>
+            </label>
+            <a href="#" className="text-sm font-bold text-[#3014B8] hover:text-[#251090] transition-colors">
+              Forgot Password?
+            </a>
+          </div>
+
+          {/* Login Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-[52px] bg-[#3014B8] text-white font-bold rounded-2xl hover:bg-[#251090] active:scale-[0.98] transition-all disabled:opacity-70 shadow-lg shadow-[#3014B8]/20 mt-2"
+          >
+            {loading ? "Logging in..." : "Log In"}
+          </button>
+        </form>
+
+        {/* Encrypted Footer */}
+        <footer className="mt-10 pt-6 border-t border-slate-50 flex justify-center items-center gap-2 text-slate-400">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span className="text-[10px] font-bold uppercase tracking-[2px]">
+            Encrypted Session
+          </span>
+        </footer>
       </main>
 
-      <div className="flex flex-col items-center gap-2 mt-8">
-        <p className="text-[12px] text-[#64748B]">
-          © 2026 Esi-SBA. All rights reserved.
-        </p>
-
-        <div className="flex gap-4 text-[12px] text-[#64748B]">
-          <a href="#" className="hover:underline">
-            Privacy Policy
-          </a>
-          <a href="#" className="hover:underline">
-            Terms of Service
-          </a>
-          <a href="#" className="hover:underline">
-            Support
-          </a>
+      {/* External Footer */}
+      <footer className="mt-8 flex flex-col items-center gap-2 text-[#94A3B8]">
+        <p className="text-[12px]">© 2026 Esi-SBA. All rights reserved.</p>
+        <div className="flex gap-4 text-[12px] font-medium">
+          <a href="#" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
+          <a href="#" className="hover:text-slate-600 transition-colors">Terms of Service</a>
+          <a href="#" className="hover:text-slate-600 transition-colors">Support</a>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }
