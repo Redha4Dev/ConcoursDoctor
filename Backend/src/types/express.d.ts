@@ -11,6 +11,10 @@ declare global {
         lastName: string;
       };
     }
+    namespace Multer {
+      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+      interface File {}
+    }
   }
 }
 

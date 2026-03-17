@@ -13,6 +13,7 @@ import authRouter from "./modules/auth/auth.router.js";
 import "dotenv/config";
 import formationsRouter from "./modules/formations/formations.router.js";
 import sessionsRouter from "./modules/sessions/sessions.router.js";
+import candidatesRouter from "./modules/candidates/candidates.router.js";
 
 const openApiPath = path.join(process.cwd(), "src/docs/openapi.yaml");
 const openApiFile = fs.readFileSync(openApiPath, "utf8");
@@ -39,6 +40,7 @@ app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/formations", formationsRouter);
 app.use("/api/v1/sessions", sessionsRouter);
+app.use("/api/v1/candidates", candidatesRouter);
 app.use(errorHandler);
 
 export default app;
