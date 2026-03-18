@@ -67,6 +67,16 @@ export function AppSidebar() {
     setLoading(false);
   };
 
+  const settingsUrl = "/dashboard/settings";
+  const isSettingsActive = pathname === settingsUrl;
+
+  // Helper function for active styles to avoid repetition
+  const getActiveClasses = (isActive: boolean) => 
+    isActive 
+      ? "!bg-[#EEEBFF] !text-[#3b27b5] shadow-sm font-semibold" 
+      : "text-slate-600 hover:bg-slate-50";
+
+
   return (
     <Sidebar className="border-r border-slate-100 bg-white">
       {/* Logo Section */}
@@ -94,11 +104,7 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     asChild
                     isActive={isActive}
-                    className={`h-11 px-4 transition-all duration-200 ${
-                      isActive
-                        ? "!bg-[#EEEBFF] !text-[#3b27b5] shadow-sm font-semibold"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
+                    className={`h-11 px-4 transition-all duration-200 ${getActiveClasses(isActive)}`}
                   >
                     <a href={item.url}>
                       <item.icon
@@ -121,9 +127,15 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton className="h-11 px-4 text-slate-600 hover:bg-slate-50">
-                <Settings size={22} className="text-slate-700" />
-                <span className="text-[15px]">Settings</span>
+              <SidebarMenuButton
+                asChild
+                isActive={isSettingsActive}
+                className={`h-11 px-4 transition-all duration-200 ${getActiveClasses(isSettingsActive)}`}
+              >
+                <a href={settingsUrl}>
+                  <Settings size={32} className={isSettingsActive? "text-[#3b27b5]" : "text-slate-700" } />
+                  <span className="text-[15px]">Settings</span>
+                </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
