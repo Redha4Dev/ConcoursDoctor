@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${jakarta.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${jakarta.variable} [font-family:var(--font-jakarta)] antialiased`}
       >
         <AuthProvider>{children}</AuthProvider>
       </body>

@@ -31,7 +31,7 @@ import { api } from "@/lib/api";
 
 const navItems = [
   { title: "Dashboard", icon: LayoutGrid, url: "/dashboard" },
-  { title: "Candidates", icon: Users, url: "/candidates" },
+  { title: "Candidates", icon: Users, url: "/dashboard/candidates" },
   { title: "Manage Teachers", icon: UserCog, url: "/teachers" },
   { title: "Correctors", icon: ClipboardCheck, url: "/correctors" },
   { title: "Exams", icon: FileText, url: "/exams" },
