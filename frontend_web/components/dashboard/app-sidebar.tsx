@@ -30,12 +30,12 @@ import {
 import { api } from "@/lib/api";
 
 const navItems = [
-  { title: "Dashboard", icon: LayoutGrid, url: "/dashboard" },
-  { title: "Candidates", icon: Users, url: "/candidates" },
-  { title: "Manage Teachers", icon: UserCog, url: "/teachers" },
-  { title: "Correctors", icon: ClipboardCheck, url: "/correctors" },
-  { title: "Exams", icon: FileText, url: "/exams" },
-  { title: "Results", icon: BarChart3, url: "/results" },
+  { title: "Dashboard", icon: LayoutGrid, url: "/dashboard/overview" },
+  { title: "Candidates", icon: Users, url: "/dashboard/candidates" },
+  { title: "Manage Teachers", icon: UserCog, url: "/dashboard/teachers" }, 
+  { title: "Correctors", icon: ClipboardCheck, url: "/dashboard/correctors" },
+  { title: "Exams", icon: FileText, url: "/dashboard/exams" },
+  { title: "Results", icon: BarChart3, url: "/dashboard/results" },
 ];
 
 export function AppSidebar() {
@@ -86,7 +86,8 @@ export function AppSidebar() {
             {navItems.map((item) => {
               // In a real app, you'd check if pathname === item.url
               // For this demo, let's keep 'Candidates' active as requested
-              const isActive = item.title === "Candidates";
+              // const isActive = item.title === "Candidates";
+              const isActive = pathname === item.url;
 
               return (
                 <SidebarMenuItem key={item.title}>
