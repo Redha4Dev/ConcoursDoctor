@@ -23,27 +23,23 @@ export function AuthProvider({ children } : any) {
   }, []);
 
   // --- LOGIN FUNCTION (This is now called by register) ---
-  const login = async (email, password) => {
+const login = async (email, password) => {
   const res = await api.post("/api/v1/auth/login", { email, password });
 
-  // --- THIS IS THE FIX ---
-  // We now look inside the nested 'data' object that the backend is sending.
   const token = res.data.data.token;
   const user = res.data.data.user;
-  // -----------------------
 
-  // The rest of the code works perfectly now because 'token' and 'user' will be correctly assigned.
-  if (token && typeof token === 'string' && user) {
+  if (token && user) {
     await SecureStore.setItemAsync("token", token);
     await SecureStore.setItemAsync("user", JSON.stringify(user));
-    
+
     setUser(user);
-    //router.replace("/(farmer)"); // Or your main app route
   } else {
-    // This error will no longer be thrown
-    throw new Error("Login failed: Invalid response structure from server.");
+    throw new Error("Invalid response from server");
   }
 };
+
+
   // --- REGISTER FUNCTION (Now calls login) ---
 //   const register = async (userData) => {
 //     const apiPayload = {
@@ -98,7 +94,7 @@ export function useProtectedRoute() {
       return;
     }
 
-    const inAuthGroup = segments[0] === '(auth)';
+    //const inAuthGroup = segments[0] === '(auth)';
     
     // --- THIS IS THE KEY CHANGE ---
     // We need to know if the user is in ANY of the protected tab groups.
@@ -106,15 +102,15 @@ export function useProtectedRoute() {
     // Add other roles here, e.g., || segments[0] === '(supplier)'
     // ----------------------------
 
-    if (!user && !inAuthGroup) {
-      // If the user is not signed in and is trying to access anything
-      // other than the auth pages, redirect to login.
-      router.replace('/(auth)/login');
-    } else if (user /* && !inApp */) {
-      // If the user IS signed in but is currently on a page
-      // that is NOT a protected app page (e.g., they are on the login page),
-      // redirect them to their correct home.
-      //router.replace(`/${user.role === 'farmer' ? '(farmer)' : '(supplier)'}`); // Add more roles here
-    }
+    // if (!user && !inAuthGroup) {
+    //   // If the user is not signed in and is trying to access anything
+    //   // other than the auth pages, redirect to login.
+    //   router.replace('/(auth)/login');
+    // } else if (user /* && !inApp */) {
+    //   // If the user IS signed in but is currently on a page
+    //   // that is NOT a protected app page (e.g., they are on the login page),
+    //   // redirect them to their correct home.
+    //   //router.replace(`/${user.role === 'farmer' ? '(farmer)' : '(supplier)'}`); // Add more roles here
+    // }
   }, [user, segments, navigationState, loading, router]);
 }

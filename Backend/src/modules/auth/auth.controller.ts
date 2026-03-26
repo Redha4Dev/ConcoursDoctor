@@ -17,6 +17,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     message: "Login successful",
     data: {
       user,
+      token
       // ← never send token in body — it's in the cookie
     },
   });
