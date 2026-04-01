@@ -1,0 +1,17 @@
+export default {
+  welcome: "Welcome",
+  login: "Login",
+  password: "Password",
+  username: "Username",
+  email: "Email",
+  or: "or",
+  "username or email": "Username or Email",
+  "forgot password?": "Forgot Password?",
+  "remember me": "Remember Me",
+  "Supervisor Secure Access Portal": "Supervisor Secure Access Portal",
+  "Log In": "Log In",
+  "ENCRYPTED SESSION": "ENCRYPTED SESSION",
+  "Privacy Policy": "Privacy Policy",
+  "Terms of Service": "Terms of Service",
+  "Support": "Support",
+};

@@ -1,0 +1,17 @@
+export default {
+  welcome: "مرحبا",
+  login: "تسجيل الدخول",
+  password: "كلمة المرور",
+  username: "اسم المستخدم",
+  email: "البريد الإلكتروني",
+  or: "أو",
+  "username or email": "اسم المستخدم أو البريد الإلكتروني",
+  "forgot password?": "نسيت كلمة المرور؟",
+  "remember me": "تذكرني",
+  "Supervisor Secure Access Portal": "منظومة الوصول الآمن للمشرفين",
+  "Log In": "تسجيل الدخول",
+  "ENCRYPTED SESSION": "جلسة مشفرة",
+  "Privacy Policy": "سياسة الخصوصية",
+  "Terms of Service": "شروط الخدمة",
+  "Support": "الدعم",
+};
