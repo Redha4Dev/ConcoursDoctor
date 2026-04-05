@@ -17,7 +17,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     message: "Login successful",
     data: {
       user,
-      token
+      token,
       // ← never send token in body — it's in the cookie
     },
   });
@@ -61,3 +61,33 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const user = await authService.getMe(req.user!.id);
   res.status(200).json({ success: true, data: user });
 });
+
+export const forgotPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.forgotPassword(req.body);
+
+    // always return same message — security: don't reveal if email exists
+    res.status(200).json({
+      success: true,
+      message: "Si cet email existe, un lien de réinitialisation a été envoyé.",
+    });
+  },
+);
+
+export const resetPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.resetPassword(req.body);
+
+    // clear cookie — force re-login with new password
+    res.clearCookie("jwt", {
+      httpOnly: true,
+      sameSite: "strict" as const,
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Mot de passe réinitialisé. Veuillez vous reconnecter.",
+    });
+  },
+);

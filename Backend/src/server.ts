@@ -14,6 +14,8 @@ const start = async () => {
 
     app.listen(PORT, () => {
       console.log(`✓ Server running at http://localhost:${PORT}`);
+
+      console.log(`documentaion here : http://localhost:${PORT}/api/docs `);
     });
   } catch (err) {
     console.error("✗ Failed to start server:", err);

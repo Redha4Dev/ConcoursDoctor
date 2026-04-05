@@ -1,23 +1,795 @@
 openapi: 3.1.0
 
 info:
-  title: Project API
-  description: Backend API documentation
+  title: ConcoursDoctor API
+  description: |
+    Backend API for ConcoursDoctor — Doctoral Competition Management System.
+    Developed at ESI-SBA, Sidi Bel Abbès — Academic Year 2025/2026.
+
+    ## Authentication
+    All protected routes require a valid JWT token stored in an httpOnly cookie (`jwt`).
+    Login via `POST /api/v1/auth/login` to obtain the cookie.
+
+    ## Roles
+    - **ADMIN** — Full access. Creates all user accounts.
+    - **COORDINATOR** — Manages sessions, assigns correctors, configures grading.
+    - **CORRECTOR** — Accesses and grades assigned anonymous copies.
+    - **JURY_MEMBER** — Reviews deliberation results, signs PV.
+    - **SURVEILLANT** — Records attendance during exam sessions.
+    - **AUDITOR** — Read-only access to audit logs and archived data.
   version: 1.0.0
+  contact:
+    name: ESI-SBA — ConcoursDoctor Team
 
 servers:
-  - url: http://localhost:4000
+  - url: http://localhost:4213
     description: Local development
 
+tags:
+  - name: System
+    description: Health check and system status
+  - name: Auth
+    description: Authentication — login, logout, password management
+  - name: Users
+    description: User management (Admin only) — create, list, update, deactivate
+  - name: Formations
+    description: Doctoral formation management
+  - name: Sessions
+    description: Competition session management
+  - name: Candidates
+    description: Candidate import, listing, and management
+
+# ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jwt
+
+  schemas:
+    # ── Generic ──────────────────────────────────────────────────────────────
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Success
+        data:
+          type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Error message
+        details:
+          nullable: true
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 47
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 3
+        hasNext:
+          type: boolean
+          example: true
+        hasPrev:
+          type: boolean
+          example: false
+
+    # ── Enums ─────────────────────────────────────────────────────────────────
+    Role:
+      type: string
+      enum: [ADMIN, COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+
+    SessionStatus:
+      type: string
+      enum:
+        [
+          DRAFT,
+          OPEN,
+          ATTENDANCE_LOCKED,
+          ANONYMIZED,
+          CORRECTION_OPEN,
+          DELIBERATION,
+          CLOSED,
+          ARCHIVED,
+        ]
+
+    CandidateStatus:
+      type: string
+      enum: [REGISTERED, VALID, INVALID]
+
+    ImportSource:
+      type: string
+      enum: [CSV, EXCEL, API, MANUAL]
+
+    # ── User ──────────────────────────────────────────────────────────────────
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+          example: Ahmed
+        lastName:
+          type: string
+          example: Benali
+        email:
+          type: string
+          format: email
+          example: ahmed.benali@usthb.dz
+        role:
+          $ref: "#/components/schemas/Role"
+        isActive:
+          type: boolean
+        lastLogin:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    UserDetail:
+      allOf:
+        - $ref: "#/components/schemas/UserSummary"
+        - type: object
+          properties:
+            mustChangePassword:
+              type: boolean
+            updatedAt:
+              type: string
+              format: date-time
+            coordinatorProfile:
+              $ref: "#/components/schemas/CoordinatorProfile"
+            surveillantProfile:
+              $ref: "#/components/schemas/SurveillantProfile"
+            correctorProfile:
+              $ref: "#/components/schemas/CorrectorProfile"
+            juryMemberProfile:
+              $ref: "#/components/schemas/JuryMemberProfile"
+            auditorProfile:
+              $ref: "#/components/schemas/AuditorProfile"
+            formationStaff:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  role:
+                    $ref: "#/components/schemas/Role"
+                  assignedAt:
+                    type: string
+                    format: date-time
+                  formation:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      code:
+                        type: string
+
+    CoordinatorProfile:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        department:
+          type: string
+          nullable: true
+          example: Informatique
+        phoneNumber:
+          type: string
+          nullable: true
+          example: "0555123456"
+
+    SurveillantProfile:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        phoneNumber:
+          type: string
+          nullable: true
+
+    CorrectorProfile:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        specialization:
+          type: string
+          nullable: true
+          example: Intelligence Artificielle
+        academicGrade:
+          type: string
+          nullable: true
+          example: Professeur
+        institution:
+          type: string
+          nullable: true
+          example: USTHB
+        isAvailable:
+          type: boolean
+          example: true
+
+    JuryMemberProfile:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        academicRank:
+          type: string
+          nullable: true
+          example: Professeur
+        institution:
+          type: string
+          nullable: true
+          example: ESI-SBA
+
+    AuditorProfile:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        scope:
+          type: string
+          nullable: true
+
+    CreateUserBody:
+      type: object
+      required: [firstName, lastName, email, role]
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+          example: Ahmed
+        lastName:
+          type: string
+          minLength: 2
+          example: Benali
+        email:
+          type: string
+          format: email
+          example: ahmed.benali@usthb.dz
+        role:
+          type: string
+          enum: [COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+        department:
+          type: string
+          description: Required for COORDINATOR
+          example: Informatique
+        phoneNumber:
+          type: string
+          description: For COORDINATOR or SURVEILLANT
+        specialization:
+          type: string
+          description: For CORRECTOR
+          example: Intelligence Artificielle
+        academicGrade:
+          type: string
+          description: For CORRECTOR
+          example: Professeur
+        institution:
+          type: string
+          description: For CORRECTOR or JURY_MEMBER
+          example: USTHB
+        academicRank:
+          type: string
+          description: For JURY_MEMBER
+          example: Professeur
+        scope:
+          type: string
+          description: For AUDITOR
+
+    UpdateUserBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+        lastName:
+          type: string
+          minLength: 2
+        department:
+          type: string
+        phoneNumber:
+          type: string
+        specialization:
+          type: string
+        academicGrade:
+          type: string
+        institution:
+          type: string
+        academicRank:
+          type: string
+        scope:
+          type: string
+        isAvailable:
+          type: boolean
+
+    # ── Formation ─────────────────────────────────────────────────────────────
+    FormationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Doctorat en Informatique
+        code:
+          type: string
+          example: INFO-2026
+        department:
+          type: string
+          example: Informatique
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        _count:
+          type: object
+          properties:
+            sessions:
+              type: integer
+            staff:
+              type: integer
+
+    FormationDetail:
+      allOf:
+        - $ref: "#/components/schemas/FormationSummary"
+        - type: object
+          properties:
+            staff:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  role:
+                    $ref: "#/components/schemas/Role"
+                  assignedAt:
+                    type: string
+                    format: date-time
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      firstName:
+                        type: string
+                      lastName:
+                        type: string
+                      email:
+                        type: string
+                      role:
+                        $ref: "#/components/schemas/Role"
+            sessions:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  label:
+                    type: string
+                  status:
+                    $ref: "#/components/schemas/SessionStatus"
+                  examDate:
+                    type: string
+                    format: date-time
+
+    CreateFormationBody:
+      type: object
+      required: [name, code, department]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          example: Doctorat en Informatique
+        code:
+          type: string
+          minLength: 2
+          maxLength: 20
+          example: INFO-2026
+        department:
+          type: string
+          minLength: 2
+          example: Informatique
+        description:
+          type: string
+          example: Formation doctorale en informatique quantique
+
+    AssignStaffBody:
+      type: object
+      required: [userId, role]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+
+    # ── Session ───────────────────────────────────────────────────────────────
+    SessionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        formationId:
+          type: string
+          format: uuid
+        coordinatorId:
+          type: string
+          format: uuid
+        academicYear:
+          type: string
+          example: 2025/2026
+        label:
+          type: string
+          example: Concours Doctorat Informatique 2025/2026
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        availableSlots:
+          type: integer
+          example: 20
+        examDate:
+          type: string
+          format: date-time
+        examRoom:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        formation:
+          type: object
+          properties:
+            name:
+              type: string
+            code:
+              type: string
+        coordinator:
+          type: object
+          properties:
+            firstName:
+              type: string
+            lastName:
+              type: string
+            email:
+              type: string
+        _count:
+          type: object
+          properties:
+            candidates:
+              type: integer
+            subjects:
+              type: integer
+
+    SessionDetail:
+      allOf:
+        - $ref: "#/components/schemas/SessionSummary"
+        - type: object
+          properties:
+            subjects:
+              type: array
+              items:
+                $ref: "#/components/schemas/Subject"
+            gradingConfig:
+              $ref: "#/components/schemas/GradingConfig"
+
+    CreateSessionBody:
+      type: object
+      required: [formationId, academicYear, label, availableSlots, examDate]
+      properties:
+        formationId:
+          type: string
+          format: uuid
+        academicYear:
+          type: string
+          pattern: '^\d{4}\/\d{4}$'
+          example: 2025/2026
+        label:
+          type: string
+          minLength: 2
+          example: Concours Doctorat Informatique 2025/2026
+        availableSlots:
+          type: integer
+          minimum: 1
+          example: 20
+        examDate:
+          type: string
+          format: date-time
+          example: 2026-04-14T09:00:00.000Z
+        examRoom:
+          type: string
+          example: Amphi A
+
+    Subject:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Génie Logiciel
+        coefficient:
+          type: number
+          example: 1
+        maxGrade:
+          type: number
+          example: 20
+        minimumGrade:
+          type: number
+          example: 10
+        description:
+          type: string
+          nullable: true
+
+    CreateSubjectBody:
+      type: object
+      required: [name, coefficient]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          example: Bases de Données Avancées
+        coefficient:
+          type: number
+          minimum: 0.1
+          example: 3
+        maxGrade:
+          type: number
+          default: 20
+        minimumGrade:
+          type: number
+          default: 10
+        description:
+          type: string
+
+    GradingConfig:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        discrepancyThreshold:
+          type: number
+          example: 3
+          description: Default 3 points — per ministerial regulation
+        configuredAt:
+          type: string
+          format: date-time
+        configuredBy:
+          type: string
+          format: uuid
+
+    SetGradingConfigBody:
+      type: object
+      properties:
+        discrepancyThreshold:
+          type: number
+          minimum: 0
+          maximum: 20
+          default: 3
+          example: 3
+
+    # ── Candidates ────────────────────────────────────────────────────────────
+    Candidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        registrationNumber:
+          type: string
+          example: 2026001
+        firstName:
+          type: string
+          example: Ahmed
+        lastName:
+          type: string
+          example: Benali
+        email:
+          type: string
+          nullable: true
+          example: ahmed@email.com
+        phoneNumber:
+          type: string
+          nullable: true
+        nationalId:
+          type: string
+          nullable: true
+        degreeTitle:
+          type: string
+          nullable: true
+          example: Master Informatique
+        degreeInstitution:
+          type: string
+          nullable: true
+          example: USTHB
+        graduationYear:
+          type: integer
+          nullable: true
+          example: 2024
+        status:
+          $ref: "#/components/schemas/CandidateStatus"
+        importedAt:
+          type: string
+          format: date-time
+
+    ImportBatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        source:
+          $ref: "#/components/schemas/ImportSource"
+        fileName:
+          type: string
+          nullable: true
+        totalRecords:
+          type: integer
+        validRecords:
+          type: integer
+        invalidRecords:
+          type: integer
+        validationErrors:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              field:
+                type: string
+              message:
+                type: string
+        importedAt:
+          type: string
+          format: date-time
+        importedByUser:
+          type: object
+          properties:
+            firstName:
+              type: string
+            lastName:
+              type: string
+            email:
+              type: string
+
+    ImportResult:
+      type: object
+      properties:
+        batchId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        source:
+          $ref: "#/components/schemas/ImportSource"
+        imported:
+          type: integer
+          example: 44
+        skipped:
+          type: integer
+          example: 1
+          description: Duplicate registration numbers
+        invalid:
+          type: integer
+          example: 2
+        duplicates:
+          type: array
+          items:
+            type: string
+          description: List of duplicate registration numbers (first 20)
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              field:
+                type: string
+              value: {}
+              message:
+                type: string
+        summary:
+          type: string
+          example: "44 imported, 1 skipped (duplicates), 2 invalid"
+
+    CandidateStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        registered:
+          type: integer
+        valid:
+          type: integer
+        invalid:
+          type: integer
+
+# ─── SECURITY DEFAULT ─────────────────────────────────────────────────────────
+security:
+  - cookieAuth: []
+
+# ─── PATHS ────────────────────────────────────────────────────────────────────
 paths:
-  /health:
+  # ══ SYSTEM ══════════════════════════════════════════════════════════════════
+  /api/health:
     get:
       summary: Health check
-      tags:
-        - System
+      description: Verify the API and database connections are healthy.
+      tags: [System]
+      security: []
       responses:
         "200":
-          description: API is up
+          description: API is running
           content:
             application/json:
               schema:
@@ -26,3 +798,1044 @@ paths:
                   status:
                     type: string
                     example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  # ══ AUTH ════════════════════════════════════════════════════════════════════
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      description: |
+        Authenticate with email and password.
+        Returns user info and sets JWT in an httpOnly cookie.
+        The cookie is automatically sent on all subsequent requests.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@concours.dz
+                password:
+                  type: string
+                  example: Admin@2026
+            example:
+              email: admin@concours.dz
+              password: Admin@2026
+      responses:
+        "200":
+          description: Login successful — JWT cookie set
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                format: uuid
+                              firstName:
+                                type: string
+                              lastName:
+                                type: string
+                              email:
+                                type: string
+                              role:
+                                $ref: "#/components/schemas/Role"
+                              mustChangePassword:
+                                type: boolean
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/auth/logout:
+    post:
+      summary: Logout
+      description: Clears the JWT cookie and ends the session.
+      tags: [Auth]
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+
+  /api/v1/auth/me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user's profile and role.
+      tags: [Auth]
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          firstName:
+                            type: string
+                          lastName:
+                            type: string
+                          email:
+                            type: string
+                          role:
+                            $ref: "#/components/schemas/Role"
+                          mustChangePassword:
+                            type: boolean
+                          lastLogin:
+                            type: string
+                            format: date-time
+                            nullable: true
+        "401":
+          description: Not authenticated
+
+  /api/v1/auth/change-password:
+    post:
+      summary: Change password
+      description: |
+        Change the current user's password.
+        Clears the JWT cookie after success — user must re-login.
+        Resets mustChangePassword to false.
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword]
+              properties:
+                oldPassword:
+                  type: string
+                  example: Admin@2026
+                newPassword:
+                  type: string
+                  minLength: 8
+                  example: NewAdmin@2026
+      responses:
+        "200":
+          description: Password changed — JWT cookie cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Current password incorrect or validation error
+        "401":
+          description: Not authenticated
+
+  /api/v1/auth/forgot-password:
+    post:
+      summary: Forgot password
+      description: |
+        Sends a password reset link to the user's email.
+        Always returns the same response regardless of whether the email exists (security).
+        Token expires in 15 minutes.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: ahmed.benali@usthb.dz
+      responses:
+        "200":
+          description: Reset email sent (same response whether email exists or not)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/auth/reset-password:
+    post:
+      summary: Reset password
+      description: |
+        Reset password using a valid token from the reset email.
+        Token is validated by SHA-256 hash comparison.
+        Token can only be used once — cleared after use.
+        Clears JWT cookie — user must re-login.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                  description: Raw token from reset email URL
+                newPassword:
+                  type: string
+                  minLength: 8
+                  example: NewPass@123
+      responses:
+        "200":
+          description: Password reset — JWT cookie cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Token invalid or expired
+
+  # ══ USERS ════════════════════════════════════════════════════════════════════
+  /api/v1/users:
+    get:
+      summary: List all users
+      description: |
+        Returns all users excluding ADMIN accounts.
+        Supports search by name/email and filter by role.
+        Admin only.
+      tags: [Users]
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by firstName, lastName, or email
+          example: Ahmed
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/Role"
+          description: Filter by role
+          example: CORRECTOR
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/UserSummary"
+                          pagination:
+                            $ref: "#/components/schemas/Pagination"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+
+    post:
+      summary: Create user
+      description: |
+        Create a new user account with a role-specific profile.
+        A temporary password is generated and sent by email.
+        The user must change the password on first login (mustChangePassword=true).
+        Admin only.
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+            examples:
+              corrector:
+                summary: Create a corrector
+                value:
+                  firstName: Ahmed
+                  lastName: Benali
+                  email: ahmed.benali@usthb.dz
+                  role: CORRECTOR
+                  specialization: Intelligence Artificielle
+                  academicGrade: Professeur
+                  institution: USTHB
+              juryMember:
+                summary: Create a jury member
+                value:
+                  firstName: Nabil
+                  lastName: Keskes
+                  email: keskes@esi-sba.dz
+                  role: JURY_MEMBER
+                  academicRank: Professeur
+                  institution: ESI-SBA
+              surveillant:
+                summary: Create a surveillant
+                value:
+                  firstName: Kaci
+                  lastName: Mohamed
+                  email: kaci@esi-sba.dz
+                  role: SURVEILLANT
+                  phoneNumber: "0555123456"
+      responses:
+        "201":
+          description: User created — welcome email sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            $ref: "#/components/schemas/UserDetail"
+                          tempPassword:
+                            type: string
+                            description: Temporary password (shown once — also emailed)
+                            example: a3f8b2c1d4e5f6a7
+        "400":
+          description: Validation error
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "409":
+          description: Email already in use
+
+  /api/v1/users/{id}:
+    get:
+      summary: Get user by ID
+      description: Returns a user's full profile including role-specific data and formation assignments.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserDetail"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden
+        "404":
+          description: User not found
+
+    patch:
+      summary: Update user
+      description: |
+        Update user name and role-specific profile fields.
+        Role cannot be changed after creation.
+        Admin only.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+            example:
+              firstName: Ahmed
+              institution: USTO
+              isAvailable: false
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "404":
+          description: User not found
+
+    delete:
+      summary: Deactivate user
+      description: |
+        Soft delete — sets isActive=false. User cannot log in.
+        Data is preserved. Admin account cannot be deactivated.
+        Admin only.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: User already inactive
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — cannot deactivate Admin
+        "404":
+          description: User not found
+
+  /api/v1/users/{id}/reactivate:
+    patch:
+      summary: Reactivate user
+      description: Reactivates a previously deactivated user account. Admin only.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User reactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: User already active
+        "404":
+          description: User not found
+
+  /api/v1/users/{id}/resend-email:
+    post:
+      summary: Resend welcome email
+      description: |
+        Generates a new temporary password and resends the welcome email.
+        Resets mustChangePassword to true.
+        Admin only.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Welcome email resent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: User not found
+
+  # ══ FORMATIONS ══════════════════════════════════════════════════════════════
+  /api/v1/formations:
+    get:
+      summary: List all formations
+      description: Returns all doctoral formations with session and staff counts.
+      tags: [Formations]
+      responses:
+        "200":
+          description: List of formations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/FormationSummary"
+        "401":
+          description: Not authenticated
+
+    post:
+      summary: Create formation
+      description: Create a new doctoral formation. Admin only.
+      tags: [Formations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFormationBody"
+            example:
+              name: Doctorat en Informatique
+              code: INFO-2026
+              department: Informatique
+              description: Formation doctorale en informatique quantique
+      responses:
+        "201":
+          description: Formation created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FormationSummary"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "409":
+          description: Formation code already exists
+
+  /api/v1/formations/{id}:
+    get:
+      summary: Get formation by ID
+      description: Returns formation detail with sessions and staff list.
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Formation detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FormationDetail"
+        "404":
+          description: Formation not found
+
+  /api/v1/formations/{id}/staff:
+    post:
+      summary: Assign staff to formation
+      description: |
+        Assign a user to a formation with a specific role.
+        The user's system role must match the assigned formation role.
+        A user can be assigned to multiple formations.
+        Admin only.
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignStaffBody"
+            example:
+              userId: 123e4567-e89b-12d3-a456-426614174000
+              role: CORRECTOR
+      responses:
+        "200":
+          description: Staff assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Role mismatch — user's system role does not match
+        "404":
+          description: Formation or user not found
+        "409":
+          description: Staff already assigned with this role
+
+  /api/v1/formations/{id}/staff/{userId}:
+    delete:
+      summary: Remove staff from formation
+      description: Remove a user's staff assignment from a formation. Admin only.
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Staff removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Staff assignment not found
+
+  # ══ SESSIONS ════════════════════════════════════════════════════════════════
+  /api/v1/sessions:
+    get:
+      summary: List all sessions
+      description: Returns all competition sessions with formation, coordinator, and candidate count.
+      tags: [Sessions]
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SessionSummary"
+        "401":
+          description: Not authenticated
+
+    post:
+      summary: Create session
+      description: Create a new competition session linked to a formation. Admin or Coordinator.
+      tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionBody"
+            example:
+              formationId: 123e4567-e89b-12d3-a456-426614174000
+              academicYear: 2025/2026
+              label: Concours Doctorat Informatique 2025/2026
+              availableSlots: 20
+              examDate: "2026-04-14T09:00:00.000Z"
+              examRoom: Amphi A
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionSummary"
+        "400":
+          description: Validation error
+        "404":
+          description: Formation not found
+
+  /api/v1/sessions/{id}:
+    get:
+      summary: Get session by ID
+      description: Returns full session detail including subjects and grading config.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionDetail"
+        "404":
+          description: Session not found
+
+  /api/v1/sessions/{id}/subjects:
+    post:
+      summary: Add subject to session
+      description: |
+        Add an exam subject with coefficient to a session.
+        Can only be done while session is in DRAFT status.
+        Admin or Coordinator.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubjectBody"
+            examples:
+              subject1:
+                summary: Génie Logiciel (coefficient 1)
+                value:
+                  name: Génie Logiciel
+                  coefficient: 1
+                  maxGrade: 20
+                  minimumGrade: 10
+              subject2:
+                summary: Bases de Données Avancées (coefficient 3)
+                value:
+                  name: Bases de Données Avancées
+                  coefficient: 3
+                  maxGrade: 20
+                  minimumGrade: 10
+      responses:
+        "201":
+          description: Subject added
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Subject"
+        "400":
+          description: Session is not in DRAFT status
+        "404":
+          description: Session not found
+
+  /api/v1/sessions/{id}/grading-config:
+    patch:
+      summary: Set grading configuration
+      description: |
+        Configure the discrepancy threshold for this session.
+        Default is 3 points per ministerial regulation (Note n°573).
+        Creates config if not exists, updates if already set.
+        Admin or Coordinator.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetGradingConfigBody"
+            example:
+              discrepancyThreshold: 3
+      responses:
+        "200":
+          description: Grading config saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GradingConfig"
+        "404":
+          description: Session not found
+
+  # ══ CANDIDATES ══════════════════════════════════════════════════════════════
+  /api/v1/candidates/{sessionId}/import:
+    post:
+      summary: Import candidates from CSV or Excel
+      description: |
+        Upload a CSV or Excel file to import candidates into a session.
+        Each row is validated using Zod. Valid rows are saved, invalid rows are reported.
+        Duplicate registration numbers in the same session are skipped gracefully.
+        Returns a detailed summary of the import operation.
+        Admin or Coordinator only.
+      tags: [Candidates]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV or Excel file (.csv, .xls, .xlsx) — max 10MB
+      responses:
+        "200":
+          description: Import completed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ImportResult"
+        "400":
+          description: No file uploaded or session not in importable status
+        "404":
+          description: Session not found
+
+  /api/v1/candidates/{sessionId}:
+    get:
+      summary: List candidates
+      description: Returns paginated list of candidates for a session with search and status filter.
+      tags: [Candidates]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by firstName, lastName, registrationNumber, or email
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/CandidateStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Paginated list of candidates
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          candidates:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Candidate"
+                          pagination:
+                            $ref: "#/components/schemas/Pagination"
+
+  /api/v1/candidates/{sessionId}/stats:
+    get:
+      summary: Get candidate statistics
+      description: Returns count of candidates by status for a session.
+      tags: [Candidates]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidate statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CandidateStats"
+
+  /api/v1/candidates/{sessionId}/batches:
+    get:
+      summary: List import batches
+      description: Returns the history of all import operations for a session.
+      tags: [Candidates]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Import batch history
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ImportBatch"
+
+  /api/v1/candidates/{sessionId}/{id}:
+    get:
+      summary: Get candidate by ID
+      description: Returns a single candidate's full details.
+      tags: [Candidates]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidate detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Candidate"
+        "404":
+          description: Candidate not found
+
+    delete:
+      summary: Remove candidate
+      description: |
+        Remove a candidate from a session.
+        Only allowed while session status is DRAFT or OPEN.
+        Admin or Coordinator only.
+      tags: [Candidates]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidate removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Cannot delete after session is locked
+        "404":
+          description: Candidate not found

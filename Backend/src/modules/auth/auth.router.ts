@@ -1,8 +1,20 @@
 import { Router } from "express";
-import { login, logout, changePassword, getMe } from "./auth.controller.js";
+import {
+  login,
+  logout,
+  changePassword,
+  getMe,
+  forgotPassword,
+  resetPassword,
+} from "./auth.controller.js";
 import { protect } from "../../middleware/authMiddleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
-import { LoginSchema, ChangePasswordSchema } from "./auth.types.js";
+import {
+  LoginSchema,
+  ChangePasswordSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+} from "./auth.types.js";
 
 const router = Router();
 
@@ -15,5 +27,8 @@ router.post(
   validate(ChangePasswordSchema),
   changePassword,
 );
+router.post("/forgot-password", validate(ForgotPasswordSchema), forgotPassword);
+
+router.post("/reset-password", validate(ResetPasswordSchema), resetPassword);
 
 export default router;
