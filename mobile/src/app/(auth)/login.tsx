@@ -59,6 +59,7 @@ export default function LoginScreen() {
 
     setIsSubmitting(true);
     try {
+      //@ts-ignore
       await login(email, password);
     } catch (error: any) {
       Alert.alert("Login Failed", error.message || "Invalid credentials.");

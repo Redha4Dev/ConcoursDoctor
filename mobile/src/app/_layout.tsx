@@ -31,29 +31,40 @@ function RootLayoutNav() {
 
 
   useEffect(() => {
-    (async () => {
-      const savedLang = await AsyncStorage.getItem("APP_LANGUAGE");
-      const savedRTL = await AsyncStorage.getItem("APP_RTL");
+  (async () => {
+    const savedLang = await AsyncStorage.getItem("APP_LANGUAGE");
 
-      const newLang = savedLang || "en";
-      i18n.locale = newLang;
-      setLang(newLang);
+    const newLang = savedLang || "en";
+    i18n.locale = newLang;
+    setLang(newLang);
 
-      const shouldBeRTL = savedRTL === "1";
+    const shouldBeRTL = newLang === "ar";
 
-      // Apply RTL setting — this only takes full effect after a reload,
-      // which is triggered by the login screen's handleChangeLanguage.
+    if (I18nManager.isRTL !== shouldBeRTL) {
       I18nManager.allowRTL(shouldBeRTL);
       I18nManager.forceRTL(shouldBeRTL);
 
-      setIsReady(true);
-    })();
-  }, []); // ← empty deps, run once on mount only
+      console.log("🔁 Restarting app to apply RTL...");
+
+      try {
+        await Updates.reloadAsync();
+      } catch {
+        DevSettings.reload();
+      }
+
+      return;
+    }
+
+    setIsReady(true);
+  })();
+}, []);
+
 
   useEffect(() => {
     if (loading) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    //@ts-ignore
     const isRoot = segments.length === 0;
 
     if (!user && !inAuthGroup) {
@@ -70,6 +81,8 @@ function RootLayoutNav() {
       </View>
     );
   }
+
+  
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
