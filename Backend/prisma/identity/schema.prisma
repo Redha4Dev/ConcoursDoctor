@@ -58,6 +58,8 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   createdBy          String?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
 
   coordinatorProfile CoordinatorProfile?
   surveillantProfile SurveillantProfile?
