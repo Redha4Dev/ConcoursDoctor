@@ -2,7 +2,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { identityDb } from "../../config/db.js";
 import { AppError } from "../../utils/AppError.js";
-import { sendMail } from "../../utils/mailer.js";
+import { sendEmail } from "../../utils/mailer.js";
 import { tempPasswordTemplate } from "../../utils/emailTemplates.js";
 import type { CreateUserDto, UpdateUserDto } from "./users.types.js";
 import type { Role } from "../../generated/identity/client.js";
@@ -115,7 +115,7 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
     dto.role,
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sendMail({ to: dto.email, subject, html }).catch((err: any) =>
+  sendEmail({ emailto: dto.email, subject, html }).catch((err: any) =>
     console.error(`[Email] Failed to send welcome email to ${dto.email}:`, err),
   );
 
@@ -360,7 +360,7 @@ export const resendWelcomeEmail = async (id: string) => {
     user.role,
   );
 
-  await sendMail({ to: user.email, subject, html });
+  await sendEmail({ emailto: user.email, subject, html });
 
   return { message: "Welcome email resent successfully" };
 };
