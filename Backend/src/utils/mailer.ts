@@ -1,30 +1,33 @@
-import { Resend } from "resend";
+import { BrevoClient, BrevoEnvironment } from "@getbrevo/brevo";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 
-export const sendMail = async (options: {
-  to: string;
+const client = new BrevoClient({
+  apiKey: process.env.BREVO_API_KEY!,
+  environment: BrevoEnvironment.Default,
+});
+
+export const sendEmail = async ({
+  emailto,
+  subject,
+  html,
+}: {
+  emailto: string;
   subject: string;
+  
   html: string;
-}) => {
+}): Promise<void> => {
   try {
-    const { data, error } = await resend.emails.send({
-      from: "ConcoursDoctor <onboarding@resend.dev>",
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
+    const result = await client.transactionalEmails.sendTransacEmail({
+      sender: { email: process.env.EMAIL_SENDER, name: "ConcourDoctora" },
+      to: [{ email: emailto }],
+      subject,
+      htmlContent: html
+  
     });
 
-    // 1. We must check the 'error' object from Resend
-    if (error) {
-      throw new Error(`Resend API Error: ${error.message}`);
-    }
-
-    console.log("✅ Email sent successfully:", data?.id);
-    return data;
-  } catch (err) {
-    console.error("❌ Mailer Failure:", err);
-    // 2. Re-throw so your forgotPassword try/catch can clear the DB tokens
-    throw err;
+    console.log("Email sent successfully:", result);
+  } catch (error) {
+    console.error("Brevo error:", error);
+    throw new Error("Failed to send email");
   }
 };

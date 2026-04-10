@@ -4,7 +4,7 @@ import { signToken } from "../../utils/jwt.js";
 import { AppError } from "../../utils/AppError.js";
 import type { LoginDTO, ChangePasswordDTO } from "./auth.types.js";
 import crypto from "crypto";
-import { sendMail } from "../../utils/mailer.js";
+import { sendEmail } from "../../utils/mailer.js";
 import { resetPasswordTemplate } from "../../utils/emailTemplates.js";
 import type { ForgotPasswordDto, ResetPasswordDto } from "./auth.types.js";
 
@@ -130,7 +130,7 @@ export const forgotPassword = async (dto: ForgotPasswordDto) => {
   // send email — if it fails, clear the token
   try {
     console.log("4. Attempting to send email to:", user.email);
-    await sendMail({ to: user.email, subject, html });
+    await sendEmail({ emailto: user.email, subject, html });
   } catch {
     await identityDb.user.update({
       where: { id: user.id },
