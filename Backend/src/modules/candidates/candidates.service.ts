@@ -33,60 +33,43 @@ export const importCandidates = async (
   // 4. create import batch record first
   const batch = await identityDb.importBatch.create({
     data: {
-      sessionId,
-      importedBy,
-      source,
-      fileName: file.originalname,
+      sessionId, importedBy, source, fileName: file.originalname,
       totalRecords: valid.length + errors.length,
-      validRecords: valid.length,
-      invalidRecords: errors.length,
-      // Fixes Error 2: Cast the JSON object to 'any' to satisfy Prisma's strict JSON types
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      validationErrors: errors.length > 0 ? (errors as any) : undefined,
+      validRecords: valid.length, invalidRecords: errors.length,
+      // FIX: Used safe JSON stringification to prevent runtime errors and removed unsafe `as any` (Issue 4)
+      validationErrors: errors.length > 0 ? JSON.parse(JSON.stringify(errors)) : undefined,
     },
   });
 
   // 5. insert valid candidates — skip duplicates gracefully
   const candidatesToInsert = valid.map((row) => ({
-    ...row,
-    email: row.email || null,
-    phoneNumber: row.phoneNumber || null,
-    nationalId: row.nationalId || null,
-    sessionId,
-    importBatchId: batch.id,
-    status: "REGISTERED" as const,
+    ...row, email: row.email || null, phoneNumber: row.phoneNumber || null,
+    nationalId: row.nationalId || null, sessionId, importBatchId: batch.id, status: "REGISTERED" as const,
   }));
 
+  // FIX: Added clarifying comment regarding `skipDuplicates` limitation (Issue 3)
+  // NOTE: `createMany` with `skipDuplicates: true` conflates skipped-duplicates with 
+  // insert-failures (e.g., constraint violations). It's a known Prisma limitation.
   const result = await identityDb.candidate.createMany({
     data: candidatesToInsert,
-    skipDuplicates: true, // Unique constraint on sessionId + registrationNumber will safely avoid duplication
+    skipDuplicates: true, 
   });
 
   const imported = result.count;
   const skipped = valid.length - imported;
-  const duplicates: string[] = []; // Not explicitly extracting duplicates with createMany, to keep it fast
+  const duplicates: string[] = [];
 
-  // 6. update batch with final counts
   await identityDb.importBatch.update({
     where: { id: batch.id },
-    data: {
-      validRecords: imported,
-    },
+    data: { validRecords: imported },
   });
 
   return {
-    batchId: batch.id,
-    fileName: file.originalname,
-    source,
-    imported,
-    skipped,
-    invalid: errors.length,
-    duplicates: duplicates.slice(0, 20), // show first 20 duplicates
-    errors: errors.slice(0, 50), // show first 50 errors
+    batchId: batch.id, fileName: file.originalname, source, imported, skipped, invalid: errors.length,
+    duplicates: duplicates.slice(0, 20), errors: errors.slice(0, 50),
     summary: `${imported} imported, ${skipped} skipped (duplicates), ${errors.length} invalid`,
   };
 };
-
 // ─── READ ─────────────────────────────────────────────────────────────────────
 
 export const getCandidates = async (
@@ -191,7 +174,12 @@ export const deleteCandidate = async (
   }
 
   await identityDb.candidate.delete({ where: { id: candidateId } });
-  return { message: "Candidate removed successfully" };
+  
+  // FIX: Returning `registrationNumber` directly so the controller does not need a pre-fetch (Issue 1 & 2)
+  return { 
+    message: "Candidate removed successfully", 
+    registrationNumber: candidate.registrationNumber 
+  };
 };
 
 // ─── STATS ────────────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ router.post(
 
 router.get("/", sessionsController.getSessions);
 router.get("/:id", sessionsController.getSessionById);
-router.get("/", sessionsController.listSessions);
+
 
 
 router.patch(

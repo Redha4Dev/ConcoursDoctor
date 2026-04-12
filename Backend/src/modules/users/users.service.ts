@@ -122,7 +122,7 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
     console.error(`[Email] Failed to send welcome email to ${dto.email}:`, err);
   }
 
-  return { user, tempPassword, emailSent };
+  return { user, emailSent };
 };
 
 export const getUsers = async (filters: {
@@ -133,6 +133,10 @@ export const getUsers = async (filters: {
 }) => {
   const { search, role, page = 1, limit = 20 } = filters;
   const skip = (page - 1) * limit;
+
+  if (role === 'ADMIN') {
+    throw new AppError("Cannot filter by ADMIN role", 400);
+  }
 
   const where = {
     role: {
@@ -327,7 +331,7 @@ export const deactivateUser = async (id: string) => {
   return identityDb.user.update({
     where: { id },
     data: { isActive: false },
-    select: { id: true, firstName: true, lastName: true, isActive: true },
+    select: { id: true, firstName: true, lastName: true, isActive: true,role:true },
   });
 };
 
@@ -339,7 +343,7 @@ export const reactivateUser = async (id: string) => {
   return identityDb.user.update({
     where: { id },
     data: { isActive: true },
-    select: { id: true, firstName: true, lastName: true, isActive: true },
+    select: { id: true, firstName: true, lastName: true, isActive: true,role:true },
   });
 };
 
@@ -362,8 +366,13 @@ export const resendWelcomeEmail = async (id: string) => {
     tempPassword,
     user.role,
   );
+  let emailSent = false;
+  try {
+    await sendEmail({ emailto: user.email, subject, html });
+    emailSent = true;
+  } catch (err: unknown) {
+    console.error(`[Email] Failed to resend welcome email to ${user.email}:`, err instanceof Error ? err.message : err);
+  }
 
-  await sendEmail({ emailto: user.email, subject, html });
-
-  return { message: "Welcome email resent successfully" };
+  return { message: "Welcome email resent successfully",email:user.email };
 };

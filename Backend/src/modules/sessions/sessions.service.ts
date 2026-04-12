@@ -73,17 +73,7 @@ const assertDraft = (status: string) => {
 
 
 
-// ─── LIST ─────────────────────────────────────────────────────────────────────
-export const listSessions = async () => {
-  return identityDb.competitionSession.findMany({
-    include: {
-      formation:   { select: { id: true, name: true, code: true } },
-      coordinator: { select: { id: true, firstName: true, lastName: true, email: true } },
-      _count:      { select: { candidates: true, subjects: true } }
-    },
-    orderBy: { createdAt: 'desc' }
-  })
-}
+
 
 
 
@@ -179,7 +169,10 @@ export const setGradingConfig = async (
   dto: SetGradingConfigDto,
   configuredBy: string
 ) => {
-  await getSessionOrThrow(sessionId)
+  const session = await getSessionOrThrow(sessionId);
+  
+  // FIX: Added assertDraft to prevent setting grading config on locked/closed sessions (Issue 3)
+  assertDraft(session.status);
 
   return identityDb.gradingConfig.upsert({
     where:  { sessionId },

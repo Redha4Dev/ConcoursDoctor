@@ -1,4 +1,5 @@
 import { identityDb } from "../../config/db.js";
+import { Role } from "../../generated/identity/client.js";
 import { AppError } from "../../utils/AppError.js";
 import type {
   CreateFormationDto,
@@ -52,12 +53,7 @@ export const getFormationById = async (id: string) => {
   return formation;
 };
 
-// ─── LIST ─────────────────────────────────────────────────────────────────────
-export const listFormations = async () => {
-  return identityDb.doctoralFormation.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-};
+
 
 export const updateFormation = async (id: string, dto: UpdateFormationDto) => {
   const formation = await identityDb.doctoralFormation.findUnique({
@@ -141,15 +137,18 @@ export const assignStaff = async (
   });
 };
 
-// ─── REMOVE STAFF ─────────────────────────────────────────────────────────────
-export const removeStaff = async (formationId: string, userId: string) => {
-  // findFirst because a user could theoretically have multiple roles in a formation
-  // but the route only passes userId — so we delete the first match
-  // If you want role-specific removal, add role to the route params
-  const record = await identityDb.formationStaff.findFirst({
-    where: { formationId, userId },
+export const removeStaff = async (formationId: string, userId: string, role: Role) => {
+  // FIX: Require `role` and scope the delete using the unique compound constraint (Issue 1)
+  const record = await identityDb.formationStaff.findUnique({
+    where: { 
+      formationId_userId_role: { formationId, userId, role } 
+    },
   });
+  
   if (!record) throw new AppError("Staff assignment not found", 404);
 
   await identityDb.formationStaff.delete({ where: { id: record.id } });
+  
+  // FIX: Return the record ID so the controller can log the correct entityId in the audit trail (Issue 2)
+  return { id: record.id };
 };
