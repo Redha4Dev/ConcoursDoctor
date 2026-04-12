@@ -114,12 +114,15 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
     tempPassword,
     dto.role,
   );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sendEmail({ emailto: dto.email, subject, html }).catch((err: any) =>
-    console.error(`[Email] Failed to send welcome email to ${dto.email}:`, err),
-  );
+  let emailSent = false;
+  try {
+    await sendEmail({ emailto: dto.email, subject, html });
+    emailSent = true;
+  } catch (err: any) {
+    console.error(`[Email] Failed to send welcome email to ${dto.email}:`, err);
+  }
 
-  return { user, tempPassword };
+  return { user, tempPassword, emailSent };
 };
 
 export const getUsers = async (filters: {

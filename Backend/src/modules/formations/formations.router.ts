@@ -27,7 +27,7 @@ router.get("/", formationsController.getFormations);
 router.get("/:id", formationsController.getFormationById);
 
 
-router.get("/", formationsController.listFormations);
+router.get("/list", formationsController.listFormations);
 
 router.patch(
   "/:id",

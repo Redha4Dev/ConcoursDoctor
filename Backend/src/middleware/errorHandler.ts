@@ -1,13 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 
-// Define an interface for errors that might have a status code
-interface AppErro extends Error {
+interface CustomError extends Error {
   statusCode?: number;
   isOperational?: boolean;
 }
 
 export const errorHandler = (
-  err: AppErro,
+  err: CustomError,
   _req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

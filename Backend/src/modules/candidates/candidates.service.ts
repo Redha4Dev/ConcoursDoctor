@@ -2,6 +2,7 @@ import "multer";
 import { identityDb } from "../../config/db.js";
 import { AppError } from "../../utils/AppError.js";
 import { parseImportFile } from "./candidates.import.js";
+import { CandidateStatus } from "../../generated/identity/client.js";
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
 
@@ -46,39 +47,24 @@ export const importCandidates = async (
   });
 
   // 5. insert valid candidates — skip duplicates gracefully
-  let imported = 0;
-  let skipped = 0;
-  const duplicates: string[] = [];
+  const candidatesToInsert = valid.map((row) => ({
+    ...row,
+    email: row.email || null,
+    phoneNumber: row.phoneNumber || null,
+    nationalId: row.nationalId || null,
+    sessionId,
+    importBatchId: batch.id,
+    status: "REGISTERED" as const,
+  }));
 
-  for (const row of valid) {
-    try {
-      await identityDb.candidate.create({
-        data: {
-          ...row,
-          email: row.email || null,
-          phoneNumber: row.phoneNumber || null,
-          nationalId: row.nationalId || null,
-          sessionId,
-          importBatchId: batch.id,
-          status: "REGISTERED", // Ensure this matches your Prisma Enum exactly
-        },
-      });
-      imported++;
-    } catch (err: unknown) {
-      // unique constraint = duplicate registration number in this session
-      if (
-        typeof err === "object" &&
-        err !== null &&
-        "code" in err &&
-        (err as { code: string }).code === "P2002"
-      ) {
-        skipped++;
-        duplicates.push(row.registrationNumber);
-      } else {
-        throw err;
-      }
-    }
-  }
+  const result = await identityDb.candidate.createMany({
+    data: candidatesToInsert,
+    skipDuplicates: true, // Unique constraint on sessionId + registrationNumber will safely avoid duplication
+  });
+
+  const imported = result.count;
+  const skipped = valid.length - imported;
+  const duplicates: string[] = []; // Not explicitly extracting duplicates with createMany, to keep it fast
 
   // 6. update batch with final counts
   await identityDb.importBatch.update({
@@ -117,9 +103,7 @@ export const getCandidates = async (
 
   const where = {
     sessionId,
-    // Fixes Error 3: Cast status to 'any' so Prisma accepts it, instead of candidate ID type
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...(status ? { status: status as any } : {}),
+    ...(status ? { status: status as CandidateStatus } : {}),
     ...(search
       ? {
           OR: [
@@ -215,14 +199,11 @@ export const deleteCandidate = async (
 export const getSessionCandidateStats = async (sessionId: string) => {
   const [total, valid, invalid] = await Promise.all([
     identityDb.candidate.count({ where: { sessionId } }),
-    // Fix: cast the strings to 'any' to satisfy Prisma enums
     identityDb.candidate.count({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      where: { sessionId, status: "VALID" as any },
+      where: { sessionId, status: CandidateStatus.VALID },
     }),
     identityDb.candidate.count({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      where: { sessionId, status: "INVALID" as any },
+      where: { sessionId, status: CandidateStatus.INVALID },
     }),
   ]);
 

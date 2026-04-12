@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import {
   login,
   logout,
@@ -18,7 +19,13 @@ import {
 
 const router = Router();
 
-router.post("/login", validate(LoginSchema), login);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { success: false, message: "Too many attempts, please try again later" },
+});
+
+router.post("/login", authLimiter, validate(LoginSchema), login);
 router.post("/logout", protect, logout);
 router.get("/me", protect, getMe);
 router.post(
@@ -27,7 +34,12 @@ router.post(
   validate(ChangePasswordSchema),
   changePassword,
 );
-router.post("/forgot-password", validate(ForgotPasswordSchema), forgotPassword);
+router.post(
+  "/forgot-password",
+  authLimiter,
+  validate(ForgotPasswordSchema),
+  forgotPassword,
+);
 
 router.post("/reset-password", validate(ResetPasswordSchema), resetPassword);
 
