@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/AppError.js";
 import { identityDb } from "../config/db.js";
+import { JWT_SECRET } from "../config/env.js";
 import type { Role } from "../generated/identity/client.js";
 
 // 1. Define the User payload interface
@@ -36,7 +37,7 @@ export const protect = async (
       return next(new AppError("You are not logged in", 401));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+    const decoded = jwt.verify(token, JWT_SECRET) as {
       id: string;
       role: string;
     };

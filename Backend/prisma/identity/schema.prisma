@@ -16,7 +16,7 @@ enum Role {
   SURVEILLANT
   CORRECTOR
   JURY_MEMBER
-  AUDITOR
+  AUDITOR 
 }
 
 enum SessionStatus {
@@ -195,6 +195,9 @@ model CompetitionSession {
   examRoom           String?
   attendanceDeadline DateTime?
   correctionDeadline DateTime?
+  //this is right????
+  resultsDeadline    DateTime?     // ← add this
+  
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
