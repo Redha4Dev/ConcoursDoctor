@@ -118,6 +118,7 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
   try {
     await sendEmail({ emailto: dto.email, subject, html });
     emailSent = true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[Email] Failed to send welcome email to ${dto.email}:`, err);
   }
@@ -134,7 +135,7 @@ export const getUsers = async (filters: {
   const { search, role, page = 1, limit = 20 } = filters;
   const skip = (page - 1) * limit;
 
-  if (role === 'ADMIN') {
+  if (role === "ADMIN") {
     throw new AppError("Cannot filter by ADMIN role", 400);
   }
 
@@ -331,7 +332,13 @@ export const deactivateUser = async (id: string) => {
   return identityDb.user.update({
     where: { id },
     data: { isActive: false },
-    select: { id: true, firstName: true, lastName: true, isActive: true,role:true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      isActive: true,
+      role: true,
+    },
   });
 };
 
@@ -343,7 +350,13 @@ export const reactivateUser = async (id: string) => {
   return identityDb.user.update({
     where: { id },
     data: { isActive: true },
-    select: { id: true, firstName: true, lastName: true, isActive: true,role:true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      isActive: true,
+      role: true,
+    },
   });
 };
 
@@ -366,13 +379,15 @@ export const resendWelcomeEmail = async (id: string) => {
     tempPassword,
     user.role,
   );
-  let emailSent = false;
+
   try {
     await sendEmail({ emailto: user.email, subject, html });
-    emailSent = true;
   } catch (err: unknown) {
-    console.error(`[Email] Failed to resend welcome email to ${user.email}:`, err instanceof Error ? err.message : err);
+    console.error(
+      `[Email] Failed to resend welcome email to ${user.email}:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 
-  return { message: "Welcome email resent successfully",email:user.email };
+  return { message: "Welcome email resent successfully", email: user.email };
 };

@@ -1,5 +1,5 @@
 import { identityDb } from "../../config/db.js";
-import { Role } from "../../generated/identity/client.js";
+import type { Role } from "../../generated/identity/client.js";
 import { AppError } from "../../utils/AppError.js";
 import type {
   CreateFormationDto,
@@ -52,8 +52,6 @@ export const getFormationById = async (id: string) => {
   if (!formation) throw new AppError("Formation not found", 404);
   return formation;
 };
-
-
 
 export const updateFormation = async (id: string, dto: UpdateFormationDto) => {
   const formation = await identityDb.doctoralFormation.findUnique({
@@ -137,18 +135,22 @@ export const assignStaff = async (
   });
 };
 
-export const removeStaff = async (formationId: string, userId: string, role: Role) => {
+export const removeStaff = async (
+  formationId: string,
+  userId: string,
+  role: Role,
+) => {
   // FIX: Require `role` and scope the delete using the unique compound constraint (Issue 1)
   const record = await identityDb.formationStaff.findUnique({
-    where: { 
-      formationId_userId_role: { formationId, userId, role } 
+    where: {
+      formationId_userId_role: { formationId, userId, role },
     },
   });
-  
+
   if (!record) throw new AppError("Staff assignment not found", 404);
 
   await identityDb.formationStaff.delete({ where: { id: record.id } });
-  
+
   // FIX: Return the record ID so the controller can log the correct entityId in the audit trail (Issue 2)
   return { id: record.id };
 };
