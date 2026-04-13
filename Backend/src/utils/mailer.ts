@@ -1,5 +1,5 @@
 import { BrevoClient, BrevoEnvironment } from "@getbrevo/brevo";
-
+import "dotenv/config";
 
 const client = new BrevoClient({
   apiKey: process.env.BREVO_API_KEY!,
@@ -13,7 +13,7 @@ export const sendEmail = async ({
 }: {
   emailto: string;
   subject: string;
-  
+
   html: string;
 }): Promise<void> => {
   try {
@@ -21,8 +21,7 @@ export const sendEmail = async ({
       sender: { email: process.env.EMAIL_SENDER, name: "ConcourDoctora" },
       to: [{ email: emailto }],
       subject,
-      htmlContent: html
-  
+      htmlContent: html,
     });
 
     console.log("Email sent successfully:", result);

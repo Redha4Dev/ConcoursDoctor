@@ -15,6 +15,9 @@ import formationsRouter from "./modules/formations/formations.router.js";
 import sessionsRouter from "./modules/sessions/sessions.router.js";
 import candidatesRouter from "./modules/candidates/candidates.router.js";
 import usersRouter from "./modules/users/users.router.js";
+import type { Request, Response, NextFunction } from "express";
+
+import { AppError } from "./utils/AppError.js";
 
 const openApiPath = path.join(process.cwd(), "src/docs/openapi.yaml");
 const openApiFile = fs.readFileSync(openApiPath, "utf8");
@@ -43,6 +46,11 @@ app.use("/api/v1/formations", formationsRouter);
 app.use("/api/v1/sessions", sessionsRouter);
 app.use("/api/v1/candidates", candidatesRouter);
 app.use("/api/v1/users", usersRouter);
+
+// This works perfectly in all Express versions
+app.use((req: Request, res: Response, next: NextFunction) => {
+  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+});
 app.use(errorHandler);
 
 export default app;
