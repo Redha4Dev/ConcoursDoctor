@@ -117,7 +117,7 @@ export const forgotPassword = async (dto: ForgotPasswordDto) => {
     },
   });
 
-  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/?token=${rawToken}`;
   const { subject, html } = resetPasswordTemplate(
     user.firstName,
     user.lastName,
