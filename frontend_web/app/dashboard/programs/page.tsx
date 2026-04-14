@@ -1,261 +1,475 @@
 "use client";
 
-import {
-  CloudUpload,
-  Eye,
-  Link as LinkIcon,
-  RefreshCw,
-  HelpCircle,
-  FileUp,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-import { api } from "@/lib/api";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import { Plus, BookOpen, HelpCircle, Download } from "lucide-react";
+import CreateFormationModal from "@/components/dashboard/CreateFormationModal";
 
-export default function Dashboard() {
+type FilterType = "Toutes" | "Active" | "Inactive";
+type StatusType = "active" | "inactive";
+
+interface Program {
+  id: string;
+  name: string;
+  subtitle: string;
+  code: string;
+  department: string;
+  sessions: number;
+  status: StatusType;
+}
+
+const PROGRAMS: Program[] = [
+  {
+    id: "1",
+    name: "Doctorat Informatique",
+    subtitle: "Systèmes Distribués & IA",
+    code: "INFO-2026",
+    department: "Informatique",
+    sessions: 3,
+    status: "active",
+  },
+  {
+    id: "2",
+    name: "Doctorat Mathématiques",
+    subtitle: "Analyse Complexe & Algèbre",
+    code: "MATH-2026",
+    department: "Mathématiques",
+    sessions: 1,
+    status: "active",
+  },
+  {
+    id: "3",
+    name: "Doctorat Physique",
+    subtitle: "Physique Quantique",
+    code: "PHYS-2026",
+    department: "Physique",
+    sessions: 0,
+    status: "inactive",
+  },
+];
+
+const StatusBadge = ({ status }: { status: StatusType }) => {
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ECFDF5] border border-[#D1FAE5]">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
+        <span className="text-[10px] font-bold uppercase tracking-wide text-[#047857]">
+          Actif
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F6F6F8] border border-[#F6F6F8]">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#64748B]" />
+      <span className="text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+        Inactif
+      </span>
+    </span>
+  );
+};
+
+export default function ProgramsPage() {
   const router = useRouter();
+  const [filter, setFilter] = useState<FilterType>("Toutes");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [message, setMessage] = useState("");
+  const activeCount = PROGRAMS.filter((p) => p.status === "active").length;
+  const inactiveCount = PROGRAMS.filter((p) => p.status === "inactive").length;
 
-  // add this at top
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  // drag states
-  const [isDragging, setIsDragging] = useState(false);
-
-  // 🔐 Check authentication
-  const checkAuth = async () => {
-    try {
-      await api.get("/api/v1/auth/me");
-    } catch (err) {
-      router.push("/login/admin");
-    }
-  };
-
-  // 🚪 Logout
-  const handleLogout = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      await api.post("/api/v1/auth/logout");
-      router.push("/login/admin");
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Logout failed");
-    }
-  };
-
-  // 📤 Upload CSV
-  const handleUpload = async () => {
-    if (!file) {
-      setMessage("Please select a CSV file");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setMessage("");
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      await api.post(
-        "/api/v1/candidates/82dc12f1-f2f2-41aa-bcd0-bf91569ba275/import",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
-
-      setMessage("✅ Candidates imported successfully");
-    } catch (err: any) {
-      console.error(err);
-      setMessage(err?.response?.data?.message || "❌ Import failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const filtered = PROGRAMS.filter((p) => {
+    if (filter === "Active") return p.status === "active";
+    if (filter === "Inactive") return p.status === "inactive";
+    return true;
+  });
 
   return (
-    <div className="flex min-h-screen bg-[#F8F9FA] font-sans text-slate-900">
-      <main className="flex-1 p-10 overflow-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Import Candidates</h1>
-          <p className="text-slate-500 text-sm">
-            Import candidates using CSV file.
-          </p>
+    <div className="flex flex-col items-start gap-10 p-8 w-full min-h-screen bg-[#F8F9FA]">
+      {/* Page Header */}
+      <div className="flex flex-row justify-between items-end w-full">
+        <div className="flex flex-col gap-2">
+          <h1
+            className="text-[36px] font-bold leading-[45px] text-[#0F172A]"
+            style={{ fontFamily: "'Google Sans', sans-serif" }}
+          >
+            Formations doctorales
+          </h1>
         </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-6 py-3 rounded-[32px] text-white font-bold text-[16px]"
+          style={{
+            background: "linear-gradient(103.23deg, #1C0087 0%, #3014B8 100%)",
+            boxShadow:
+              "0px 10px 15px -3px rgba(99,102,241,0.2), 0px 4px 6px -4px rgba(99,102,241,0.2)",
+            fontFamily: "'Google Sans', sans-serif",
+          }}
+        >
+          <Plus size={14} className="text-white" />
+          Nouvelle formation
+        </button>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-6 border-b mb-8">
-          <button className="flex items-center gap-2 pb-3 border-b-2 border-[#3b27b5] text-[#3b27b5] font-semibold text-sm">
-            <FileUp size={16} /> File Upload
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* LEFT */}
-          <div className="xl:col-span-2 space-y-8">
-            {/* Upload Area */}
-            <div
-              className={`border-2 border-dashed rounded-xl p-16 text-center transition ${
-                isDragging
-                  ? "border-[#3b27b5] bg-[#eef2ff]"
-                  : "border-[#d1d5db]"
-              }`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragging(false);
-
-                const droppedFile = e.dataTransfer.files[0];
-                if (droppedFile && droppedFile.type === "text/csv") {
-                  setFile(droppedFile);
-                } else {
-                  setMessage("Only CSV files are allowed");
-                }
-              }}
-            >
-              <div className="mb-4 text-[#3b27b5] flex justify-center">
-                <CloudUpload size={32} />
-              </div>
-
-              <h3 className="font-bold mb-2">Drag & drop your CSV file here</h3>
-
-              <p className="text-sm text-slate-500 mb-4">or click to browse</p>
-
-              {/* hidden input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={(e) => {
-                  const selectedFile = e.target.files?.[0];
-                  if (selectedFile) setFile(selectedFile);
-                }}
-              />
-
-              {/* click area */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-block cursor-pointer"
+      {/* Table Section */}
+      <div className="flex flex-col w-full gap-0 relative">
+        {/* Filters & Stats */}
+        <div className="flex flex-row justify-between items-center pb-2 w-full">
+          {/* Filter Pills */}
+          <div
+            className="flex flex-row items-center p-1 rounded-[22px] border border-[rgba(48,20,184,0.1)]"
+            style={{
+              background: "#FFFFFF",
+              boxShadow: "6px 6px 24px rgba(0,0,0,0.16)",
+              backdropFilter: "blur(7.6px)",
+            }}
+          >
+            {(["Toutes", "Active", "Inactive"] as FilterType[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-6 py-2 rounded-[35px] text-[14px] transition-all ${
+                  filter === f
+                    ? "bg-[#F6F6F8] font-bold text-[#1C0087]"
+                    : "font-normal text-[#474555]"
+                }`}
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
               >
-                <Button type="button">Browse Files</Button>
+                {f}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick Stats */}
+          <div className="flex flex-row items-center gap-6">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+              <span
+                className="text-[12px] font-bold text-[#64748B]"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                {activeCount} Actives
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#CBD5E1]" />
+              <span
+                className="text-[12px] font-bold text-[#64748B]"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                {inactiveCount} Inactives
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Table Card */}
+        <div
+          className="flex flex-col w-full rounded-[20px] overflow-hidden"
+          style={{
+            border: "1px solid rgba(48,20,184,0.1)",
+            filter: "drop-shadow(6px 6px 24px rgba(0,0,0,0.16))",
+            backdropFilter: "blur(7.6px)",
+          }}
+        >
+          {/* Table */}
+          <div className="flex flex-col w-full bg-white">
+            {/* Header */}
+            <div className="flex flex-row items-center w-full bg-white">
+              <div className="flex-[3] px-8 py-5">
+                <span
+                  className="text-[14px] font-bold text-[#64748B]"
+                  style={{ fontFamily: "'Google Sans', sans-serif" }}
+                >
+                  Formation
+                </span>
               </div>
-
-              {/* file name */}
-              {file && (
-                <p className="mt-4 text-sm text-slate-600">📄 {file.name}</p>
-              )}
-
-              {/* message */}
-              {message && (
-                <p className="mt-4 text-sm text-red-500">{message}</p>
-              )}
+              <div className="flex-[1.3] px-6 py-5 text-center">
+                <span
+                  className="text-[14px] font-bold text-[#64748B]"
+                  style={{ fontFamily: "'Google Sans', sans-serif" }}
+                >
+                  Code
+                </span>
+              </div>
+              <div className="flex-[1.5] px-6 py-5">
+                <span
+                  className="text-[14px] font-bold text-[#64748B]"
+                  style={{ fontFamily: "'Google Sans', sans-serif" }}
+                >
+                  Département
+                </span>
+              </div>
+              <div className="flex-[1.1] px-6 py-5 text-center">
+                <span
+                  className="text-[14px] font-bold text-[#64748B]"
+                  style={{ fontFamily: "'Google Sans', sans-serif" }}
+                >
+                  Sessions
+                </span>
+              </div>
+              <div className="flex-[1.3] px-6 py-5">
+                <span
+                  className="text-[14px] font-bold text-[#64748B]"
+                  style={{ fontFamily: "'Google Sans', sans-serif" }}
+                >
+                  Statut
+                </span>
+              </div>
+              <div className="w-[108px]" />
             </div>
 
-            {/* Preview (still static) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex gap-2 items-center">
-                  <Eye size={18} /> Preview
-                </CardTitle>
-              </CardHeader>
+            {/* Body */}
+            <div className="flex flex-col w-full">
+              {filtered.map((program, i) => (
+                <div
+                  key={program.id}
+                  className={`flex flex-row items-center w-full cursor-pointer hover:bg-[#F8F9FA] transition-colors ${
+                    i > 0 ? "border-t border-[#F8FAFC]" : ""
+                  }`}
+                  style={{ height: 88 }}
+                  onClick={() =>
+                    router.push(`/dashboard/programs/${program.id}`)
+                  }
+                >
+                  {/* Name + icon */}
+                  <div className="flex-[3] px-8 flex items-center gap-4">
+                    <div
+                      className="w-10 h-10 flex items-center justify-center rounded-[16px]"
+                      style={{ background: "rgba(238,242,255,0.76)" }}
+                    >
+                      <BookOpen size={16} className="text-[#4F46E5]" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span
+                        className="text-[14px] font-bold text-[#0F172A] leading-[18px]"
+                        style={{ fontFamily: "'Google Sans', sans-serif" }}
+                      >
+                        {program.name}
+                      </span>
+                      <span
+                        className="text-[12px] font-normal text-[#64748B] leading-[15px]"
+                        style={{ fontFamily: "'Google Sans', sans-serif" }}
+                      >
+                        {program.subtitle}
+                      </span>
+                    </div>
+                  </div>
 
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  {/* Code */}
+                  <div className="flex-[1.3] px-6 flex justify-center">
+                    <span
+                      className="px-2 py-0.5 rounded-[8px] text-[12px] text-[#64748B] bg-[#F6F6F8]"
+                      style={{ fontFamily: "'Liberation Mono', monospace" }}
+                    >
+                      {program.code}
+                    </span>
+                  </div>
 
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Example User</TableCell>
-                      <TableCell>example@mail.com</TableCell>
-                      <TableCell>
-                        <Badge>Preview</Badge>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  {/* Department */}
+                  <div className="flex-[1.5] px-6">
+                    <span
+                      className="text-[14px] text-[#0F172A]"
+                      style={{ fontFamily: "'Google Sans', sans-serif" }}
+                    >
+                      {program.department}
+                    </span>
+                  </div>
+
+                  {/* Sessions */}
+                  <div className="flex-[1.1] px-6 flex justify-center">
+                    <div
+                      className="w-8 h-8 flex items-center justify-center rounded-full"
+                      style={{
+                        background:
+                          program.sessions > 0
+                            ? "#EAE7F7"
+                            : "rgba(48,20,184,0.1)",
+                      }}
+                    >
+                      <span
+                        className="text-[12px] font-bold text-[#3014B8]"
+                        style={{ fontFamily: "'Google Sans', sans-serif" }}
+                      >
+                        {program.sessions}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex-[1.3] px-6">
+                    <StatusBadge status={program.status} />
+                  </div>
+
+                  {/* Actions */}
+                  <div className="w-[108px] px-8 flex justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                      className="flex items-center justify-center w-5 h-8 hover:bg-gray-100 rounded"
+                    >
+                      <span className="text-[#64748B] text-lg leading-none">
+                        ···
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* RIGHT */}
-          <div className="space-y-6">
-            {/* Import Card */}
-            <Card className="bg-[#31178c] text-white">
-              <CardHeader>
-                <CardTitle>Ready to Import?</CardTitle>
-                <CardDescription className="text-indigo-200">
-                  Upload your CSV and import candidates.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent>
-                <Button
-                  onClick={handleUpload}
-                  disabled={loading}
-                  className="w-full bg-white text-[#31178c]"
-                >
-                  {loading ? "Uploading..." : "Finalize Import"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Help */}
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 font-bold">
-                  <HelpCircle size={16} /> Need help?
-                </div>
-                <p className="text-sm text-slate-500 mt-2">
-                  Upload a valid CSV file with correct format.
-                </p>
-              </CardContent>
-            </Card>
+          {/* Table Footer */}
+          <div className="flex flex-row justify-between items-center px-8 py-4 w-full bg-white border-t border-[#F8FAFC]">
+            <span
+              className="text-[14px] text-[#64748B]"
+              style={{ fontFamily: "'Google Sans', sans-serif" }}
+            >
+              Affichage de 1 à {filtered.length} sur {PROGRAMS.length}{" "}
+              formations
+            </span>
+            <div className="flex gap-2">
+              <button
+                className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[rgba(48,20,184,0.1)] opacity-50"
+                disabled
+              >
+                <span className="text-[#64748B] text-xs">‹</span>
+              </button>
+              <button className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[rgba(48,20,184,0.1)]">
+                <span className="text-[#64748B] text-xs">›</span>
+              </button>
+            </div>
           </div>
         </div>
-      </main>
+
+        {/* Bottom Info Cards */}
+        <div className="flex flex-row flex-wrap gap-6 pt-4 w-full">
+          {/* Guide de session card - purple */}
+          <div
+            className="flex-1 min-w-[280px] flex flex-col p-6 rounded-[20px] relative overflow-hidden"
+            style={{
+              background: "#3014B8",
+              boxShadow: "6px 6px 24px rgba(0,0,0,0.16)",
+              minHeight: 224,
+            }}
+          >
+            <div
+              className="absolute right-2 bottom-1 w-24 h-24 rounded-[16px] opacity-10"
+              style={{
+                background: "#FFFFFF",
+                transform: "rotate(12deg)",
+              }}
+            />
+            <div className="relative z-10 flex flex-col gap-1">
+              <h3
+                className="text-[18px] font-bold text-white leading-[22px]"
+                style={{ fontFamily: "'Inter', sans-serif" }}
+              >
+                Guide de session
+              </h3>
+              <p
+                className="text-[14px] text-[#EAE7F7] mt-1"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                Préparez les calendriers d'admission pour le semestre d'automne
+                2026.
+              </p>
+              <button
+                className="mt-3 px-4 py-2 rounded-[16px] text-[12px] font-bold text-white self-start"
+                style={{ background: "rgba(255,255,255,0.5)" }}
+              >
+                Voir le calendrier
+              </button>
+            </div>
+          </div>
+
+          {/* Aide rapide card - white */}
+          <div
+            className="flex-1 min-w-[280px] flex flex-col p-6 rounded-[20px] relative overflow-hidden border border-[rgba(48,20,184,0.1)]"
+            style={{
+              background: "#FFFFFF",
+              boxShadow: "6px 6px 24px rgba(0,0,0,0.16)",
+              minHeight: 222,
+            }}
+          >
+            <div
+              className="absolute right-1 bottom-1 w-28 h-28 rounded-[16px]"
+              style={{
+                background: "#F6F6F8",
+                transform: "rotate(-12deg)",
+              }}
+            />
+            <div className="relative z-10 flex flex-col gap-1">
+              <h3
+                className="text-[18px] font-bold text-[#3014B8] leading-[22px]"
+                style={{ fontFamily: "'Inter', sans-serif" }}
+              >
+                Aide rapide
+              </h3>
+              <p
+                className="text-[14px] text-[#64748B] mt-1"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                Comment désactiver une formation doctorale existante ?
+              </p>
+              <button
+                className="mt-3 text-[12px] font-bold text-[#1C0087] self-start"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                Voir la documentation
+              </button>
+            </div>
+          </div>
+
+          {/* Rapport card - lavender */}
+          <div
+            className="flex-1 min-w-[280px] flex flex-col items-center justify-center p-6 rounded-[20px]"
+            style={{
+              background: "#EAE7F7",
+              border: "1px solid rgba(255,255,255,0.5)",
+              filter: "drop-shadow(6px 6px 24px rgba(0,0,0,0.16))",
+              minHeight: 223,
+            }}
+          >
+            <div
+              className="w-[52px] h-[52px] flex items-center justify-center rounded-full border border-[rgba(255,255,255,0.8)]"
+              style={{
+                background: "rgba(255,255,255,0.5)",
+                backdropFilter: "blur(6px)",
+              }}
+            >
+              <Download size={20} className="text-[#1C0087]" />
+            </div>
+            <div className="mt-4 flex flex-col items-center gap-1 text-center">
+              <span
+                className="text-[16px] font-bold text-[#0F172A]"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                Rapport Semestriel
+              </span>
+              <span
+                className="text-[12px] text-[#64748B] px-4"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                Le rapport de performance académique est maintenant disponible.
+              </span>
+            </div>
+            <button
+              className="mt-4 w-full py-3 rounded-[16px] text-[12px] font-bold text-[#0F172A] text-center"
+              style={{
+                background: "#FFFFFF",
+                boxShadow: "0px 1px 2px rgba(0,0,0,0.05)",
+              }}
+            >
+              Télécharger PDF
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Create Modal */}
+      {showCreateModal && (
+        <CreateFormationModal onClose={() => setShowCreateModal(false)} />
+      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ interface NewUserModalProps {
 const ROLES = [
   { value: "corrector", label: "CORRECTOR" },
   { value: "Coordinator", label: "COORDINATOR" },
-  { value: "Surveillant", label: "SURVEILLANT" },
+  { value: "Supervisor", label: "SUPERVISOR" },
   { value: "Auditor", label: "AUDITOR" },
   { value: "Jury Member", label: "JURY MEMBER" },
 ];
@@ -18,7 +18,7 @@ const ROLES = [
 const SECTION_LABELS: Record<string, string> = {
   "corrector": "CORRECTOR PROFILE",
   "Jury Member": "JURY PROFILE",
-  "Surveillant": "SURVEILLANT PROFILE",
+  "Supervisor": "SUPERVISOR PROFILE",
   "Auditor": "AUDITOR PROFILE",
   "Coordinator": "COORDINATOR PROFILE",
 };
