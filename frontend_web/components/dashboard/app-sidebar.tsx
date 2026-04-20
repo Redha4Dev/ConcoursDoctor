@@ -6,10 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
   Users,
-  UserCog,
-  ClipboardCheck,
-  FileText,
-  BarChart3,
+  GraduationCap,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -30,12 +27,10 @@ import {
 import { api } from "@/lib/api";
 
 const navItems = [
-  { title: "Dashboard", icon: LayoutGrid, url: "/dashboard" },
-  { title: "Candidates", icon: Users, url: "/dashboard/candidates" },
-  { title: "Manage Teachers", icon: UserCog, url: "/teachers" },
-  { title: "Correctors", icon: ClipboardCheck, url: "/correctors" },
-  { title: "Exams", icon: FileText, url: "/exams" },
-  { title: "Results", icon: BarChart3, url: "/results" },
+  { title: "Dashboard", icon: LayoutGrid, url: "/dashboard/dashboard" },
+  { title: "Programs", icon: GraduationCap, url: "/dashboard/programs" },
+  { title: "Manage Teachers", icon: Users , url: "/dashboard/teachersGestion" }, 
+  { title: "Settings", icon: Settings , url: "/dashboard/settings" },
 ];
 
 export function AppSidebar() {
@@ -67,6 +62,13 @@ export function AppSidebar() {
     setLoading(false);
   };
 
+  // Helper function for active styles to avoid repetition
+  const getActiveClasses = (isActive: boolean) => 
+    isActive 
+      ? "!bg-[#EEEBFF] !text-[#3b27b5] shadow-sm font-semibold" 
+      : "text-slate-600 hover:bg-slate-50";
+
+
   return (
     <Sidebar className="border-r border-slate-100 bg-white">
       {/* Logo Section */}
@@ -86,18 +88,15 @@ export function AppSidebar() {
             {navItems.map((item) => {
               // In a real app, you'd check if pathname === item.url
               // For this demo, let's keep 'Candidates' active as requested
-              const isActive = item.title === "Candidates";
+              // const isActive = item.title === "Candidates";
+              const isActive = pathname === item.url;
 
               return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
                     isActive={isActive}
-                    className={`h-11 px-4 transition-all duration-200 ${
-                      isActive
-                        ? "!bg-[#EEEBFF] !text-[#3b27b5] shadow-sm font-semibold"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
+                    className={`h-11 px-4 transition-all duration-200 ${getActiveClasses(isActive)}`}
                   >
                     <a href={item.url}>
                       <item.icon
@@ -112,19 +111,6 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               );
             })}
-          </SidebarMenu>
-        </SidebarGroup>
-
-        <SidebarSeparator className="my-4 mx-4 opacity-50" />
-
-        <SidebarGroup>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton className="h-11 px-4 text-slate-600 hover:bg-slate-50">
-                <Settings size={22} className="text-slate-700" />
-                <span className="text-[15px]">Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

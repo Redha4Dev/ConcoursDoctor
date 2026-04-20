@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { User, Lock, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
+import Link from "next/link";
 
 export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
@@ -101,9 +102,9 @@ export default function AdminLogin() {
               />
               <span className="text-sm text-slate-500 group-hover:text-slate-700 transition-colors">Remember me</span>
             </label>
-            <a href="#" className="text-sm font-bold text-[#3014B8] hover:text-[#251090] transition-colors">
+            <Link href="/forgot-password" className="text-sm font-bold text-[#3014B8] hover:text-[#251090] transition-colors">
               Forgot Password?
-            </a>
+            </Link>
           </div>
 
           {/* Login Button */}

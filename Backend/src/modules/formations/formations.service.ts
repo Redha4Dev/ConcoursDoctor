@@ -48,6 +48,7 @@ export const getFormationById = async (id: string) => {
           label: true,
           status: true,
           examDate: true,
+          academicYear: true,
           _count: { select: { candidates: true } },
         },
       },
