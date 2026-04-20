@@ -6,6 +6,13 @@ import type {
   UpdateFormationDto,
   AssignStaffDto,
 } from "./formations.types.js";
+
+import { formationAssignmentTemplate } from "../../utils/emailTemplates.js";
+import { sendEmail } from "../../utils/mailer.js";
+
+
+
+
 export const createFormation = async (
   dto: CreateFormationDto,
   createdBy: string,
@@ -130,6 +137,24 @@ export const assignStaff = async (
       409,
     );
 
+const fullName = user.firstName+ " " +user.lastName;
+
+const { subject, html } = formationAssignmentTemplate(
+  fullName,
+  formation.name,
+  user.role,
+);
+
+  try {
+    await sendEmail({ emailto: user.email, subject, html });
+  } catch (err: unknown) {
+    console.error(
+      `[Email] Failed to resend welcome email to ${user.email}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+
   return identityDb.formationStaff.create({
     data: { formationId, userId: dto.userId, role: dto.role, assignedBy },
   });
@@ -145,7 +170,7 @@ export const removeStaff = async (
     where: {
       formationId_userId_role: { formationId, userId, role },
     },
-  });
+  })
 
   if (!record) throw new AppError("Staff assignment not found", 404);
 

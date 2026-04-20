@@ -15,10 +15,15 @@ export const createSession = asyncHandler(
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
       // FIX: Used null coalescing `?? null` to prevent dropping the academicYear key silently if omitted (Issue 2)
-      payload: { formationId: session.formationId, academicYear: session.academicYear ?? null },
+      payload: {
+        formationId: session.formationId,
+        academicYear: session.academicYear ?? null,
+      },
     }).catch(() => {});
 
-    res.status(201).json({ success: true, message: "Session created", data: session });
+    res
+      .status(201)
+      .json({ success: true, message: "Session created", data: session });
   },
 );
 
@@ -31,16 +36,12 @@ export const getSessions = asyncHandler(
 
 export const getSessionById = asyncHandler(
   async (req: Request, res: Response) => {
-    
     const id = req.params.id as string;
 
-    
     const session = await sessionsService.getSessionById(id);
     res.status(200).json({ success: true, data: session });
   },
 );
-
-
 
 export const updateSession = asyncHandler(
   async (req: Request, res: Response) => {
@@ -83,7 +84,7 @@ export const getSessionStaff = asyncHandler(
 );
 
 export const getSubjects = asyncHandler(async (req: Request, res: Response) => {
-   const id = req.params.id as string;
+  const id = req.params.id as string;
   const result = await sessionsService.getSubjects(id);
   res
     .status(200)
@@ -126,11 +127,7 @@ export const updateSubject = asyncHandler(
       res.status(400);
       throw new Error("subject ID is required");
     }
-    const result = await sessionsService.updateSubject(
-      id,
-      subjectId,
-      req.body,
-    );
+    const result = await sessionsService.updateSubject(id, subjectId, req.body);
 
     // ✅ AUDIT
     audit({
@@ -184,13 +181,11 @@ export const getGradingConfig = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const result = await sessionsService.getGradingConfig(id);
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Grading config retrieved",
-        data: result,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Grading config retrieved",
+      data: result,
+    });
   },
 );
 
@@ -219,3 +214,10 @@ export const setGradingConfig = asyncHandler(
       .json({ success: true, message: "Grading config saved", data: result });
   },
 );
+
+export const openSession = asyncHandler(async (req: Request, res: Response) => {
+  const result = await sessionsService.openSession(req.params.id as string);
+  res
+    .status(200)
+    .json({ success: true, message: "Session opened", data: result });
+});

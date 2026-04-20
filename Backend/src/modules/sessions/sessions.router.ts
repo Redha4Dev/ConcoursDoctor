@@ -63,5 +63,12 @@ router.patch(
   sessionsController.setGradingConfig,
 );
 
+router.patch(
+  "/:id/status",
+  restrictTo("ADMIN", "COORDINATOR"),
+  sessionsController.openSession,
+);
+
+
 
 export default router;

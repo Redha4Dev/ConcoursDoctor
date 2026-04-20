@@ -15,7 +15,7 @@ import formationsRouter from "./modules/formations/formations.router.js";
 import sessionsRouter from "./modules/sessions/sessions.router.js";
 import candidatesRouter from "./modules/candidates/candidates.router.js";
 import usersRouter from "./modules/users/users.router.js";
-
+import { roomsRouter } from "./modules/rooms/rooms.router.js";
 const openApiPath = path.join(process.cwd(), "src/docs/openapi.yaml");
 const openApiFile = fs.readFileSync(openApiPath, "utf8");
 const openApiSpec = YAML.parse(openApiFile);
@@ -43,6 +43,7 @@ app.use("/api/v1/formations", formationsRouter);
 app.use("/api/v1/sessions", sessionsRouter);
 app.use("/api/v1/candidates", candidatesRouter);
 app.use("/api/v1/users", usersRouter);
+app.use("/api/v1/rooms", roomsRouter);
 app.use(errorHandler);
 
 export default app;

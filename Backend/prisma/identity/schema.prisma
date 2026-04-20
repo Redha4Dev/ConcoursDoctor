@@ -1,7 +1,7 @@
 // prisma/identity/schema.prisma
 generator client {
   provider = "prisma-client"
-  output   = "../../src/generated/identity" // Changed this line
+  output   = "../../src/generated/identity"
 }
 
 datasource db {
@@ -58,7 +58,7 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   createdBy          String?
-  passwordResetToken   String?
+  passwordResetToken String?
   passwordResetExpires DateTime?
 
   coordinatorProfile CoordinatorProfile?
@@ -67,10 +67,11 @@ model User {
   juryMemberProfile  JuryMemberProfile?
   auditorProfile     AuditorProfile?
 
-  auditLogs           AuditLog[]
-  formationStaff      FormationStaff[]
-  coordinatedSessions CompetitionSession[]
-  importBatches       ImportBatch[]
+  auditLogs                  AuditLog[]
+  formationStaff             FormationStaff[]
+  coordinatedSessions        CompetitionSession[]
+  importBatches              ImportBatch[]
+  surveillantRoomAssignments RoomSurveillantAssignment[]
 
   @@map("users")
 }
@@ -195,18 +196,20 @@ model CompetitionSession {
   examRoom           String?
   attendanceDeadline DateTime?
   correctionDeadline DateTime?
-  //this is right????
-  resultsDeadline    DateTime?     // ← add this
+  resultsDeadline    DateTime? 
   
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  formation     DoctoralFormation @relation(fields: [formationId], references: [id])
-  coordinator   User              @relation(fields: [coordinatorId], references: [id])
-  subjects      Subject[]
-  gradingConfig GradingConfig?
-  candidates    Candidate[]
-  importBatches ImportBatch[]
+  formation              DoctoralFormation           @relation(fields: [formationId], references: [id])
+  coordinator            User                        @relation(fields: [coordinatorId], references: [id])
+  subjects               Subject[]
+  gradingConfig          GradingConfig?
+  candidates             Candidate[]
+  importBatches          ImportBatch[]
+  sessionRooms           SessionRoom[]
+  surveillantAssignments RoomSurveillantAssignment[]
+  candidateAssignments   RoomCandidateAssignment[]   // FIX: Added missing opposite relation array
 
   @@map("competition_sessions")
 }
@@ -255,6 +258,8 @@ model Candidate {
   importBatchId      String?
   importedAt         DateTime        @default(now())
 
+  roomAssignment RoomCandidateAssignment?
+
   session     CompetitionSession @relation(fields: [sessionId], references: [id])
   importBatch ImportBatch?       @relation(fields: [importBatchId], references: [id])
 
@@ -279,4 +284,66 @@ model ImportBatch {
   candidates     Candidate[]
 
   @@map("import_batches")
+}
+
+// ─── EXAM ROOMS ───────────────────────────────
+
+model Room {
+  id        String   @id @default(uuid())
+  name      String
+  capacity  Int
+  building  String?
+  floor     String?
+  createdAt DateTime @default(now())
+  isActive  Boolean  @default(true)
+  createdBy String
+
+  sessionRooms SessionRoom[] // FIX: Updated to PascalCase reference
+
+  @@map("exam_rooms")
+}
+
+// FIX: Renamed from sessionRoom to SessionRoom (PascalCase)
+model SessionRoom {
+  id           String    @id @default(uuid())
+  sessionId    String
+  roomId       String
+  usedCapacity Int       @default(0)
+  lockedAt     DateTime? // FIX: changed lockedat to lockedAt
+  lockedBy     String?
+
+  session                CompetitionSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidateAssignments   RoomCandidateAssignment[]   // FIX: typo condidateAssignments to candidateAssignments
+  surveillantAssignments RoomSurveillantAssignment[]
+  room                   Room                        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, roomId])
+  @@map("session_rooms")
+}
+
+model RoomCandidateAssignment {
+  id            String @id @default(uuid())
+  sessionRoomId String
+  candidateId   String @unique
+  sessionId     String
+
+  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade) // FIX: Updated reference
+  candidate   Candidate          @relation(fields: [candidateId], references: [id])
+  session     CompetitionSession @relation(fields: [sessionId], references: [id])
+
+  @@map("room_candidate_assignments")
+}
+
+model RoomSurveillantAssignment {
+  id            String @id @default(uuid())
+  sessionRoomId String
+  userId        String
+  sessionId     String
+
+  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade) // FIX: Updated reference
+  user        User               @relation(fields: [userId], references: [id])
+  session     CompetitionSession @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionRoomId, userId])
+  @@map("room_surveillant_assignments")
 }
