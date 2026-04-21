@@ -12,6 +12,7 @@ import type {
 } from "./rooms.types.js";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
+
 const getSessionOrThrow = async (id: string) => {
   const session = await identityDb.competitionSession.findUnique({
     where: { id },
@@ -20,9 +21,18 @@ const getSessionOrThrow = async (id: string) => {
   return session;
 };
 
+// Rooms can be managed in DRAFT or OPEN — only lock/auto-assign require OPEN
+const assertDraftOrOpen = (status: string) => {
+  if (status !== "DRAFT" && status !== "OPEN") {
+    throw new AppError("Session must be DRAFT or OPEN to manage rooms", 403);
+  }
+};
+
+// Auto-assign and lock only make sense when session is OPEN
 const assertOpen = (status: string) => {
-  if (status !== "OPEN")
-    throw new AppError("Session must be OPEN to manage rooms", 403);
+  if (status !== "OPEN") {
+    throw new AppError("Session must be OPEN to perform this action", 403);
+  }
 };
 
 const getSessionRoomOrThrow = async (
@@ -37,6 +47,12 @@ const getSessionRoomOrThrow = async (
   return sessionRoom;
 };
 
+// Returns usedCapacity if set by coordinator, otherwise falls back to room's default capacity
+const getEffectiveCapacity = (sr: {
+  usedCapacity: number | null;
+  room: { capacity: number };
+}): number => sr.usedCapacity ?? sr.room.capacity;
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // GLOBAL ROOM MANAGEMENT (ADMIN)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -47,8 +63,10 @@ export const createRoom = async (dto: CreateRoomDto, createdBy: string) => {
   });
 };
 
-export const listRooms = async () => {
+// Only active rooms by default — pass showInactive=true to see all
+export const listRooms = async (showInactive = false) => {
   return identityDb.room.findMany({
+    where: showInactive ? {} : { isActive: true },
     orderBy: { name: "asc" },
   });
 };
@@ -66,6 +84,7 @@ export const updateRoom = async (id: string, dto: UpdateRoomDto) => {
 export const deactivateRoom = async (id: string) => {
   const room = await identityDb.room.findUnique({ where: { id } });
   if (!room) throw new AppError("Room not found", 404);
+  if (!room.isActive) throw new AppError("Room is already inactive", 400);
 
   return identityDb.room.update({
     where: { id },
@@ -82,14 +101,13 @@ export const addRoomToSession = async (
   dto: AddRoomToSessionDto,
 ) => {
   const session = await getSessionOrThrow(sessionId);
-  assertOpen(session.status);
+  // FIX: allow DRAFT too — coordinator should plan rooms before opening session
+  assertDraftOrOpen(session.status);
 
-  // Room must exist and be active
   const room = await identityDb.room.findUnique({ where: { id: dto.roomId } });
   if (!room) throw new AppError("Room not found", 404);
   if (!room.isActive) throw new AppError("Room is inactive", 400);
 
-  // Room can only be added once per session
   const existing = await identityDb.sessionRoom.findUnique({
     where: { sessionId_roomId: { sessionId, roomId: dto.roomId } },
   });
@@ -123,12 +141,20 @@ export const getSessionRooms = async (sessionId: string) => {
       surveillantAssignments: {
         include: {
           user: {
-            select: { id: true, firstName: true, lastName: true, email: true },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
           },
         },
       },
       _count: {
-        select: { candidateAssignments: true, surveillantAssignments: true },
+        select: {
+          candidateAssignments: true,
+          surveillantAssignments: true,
+        },
       },
     },
     orderBy: { room: { name: "asc" } },
@@ -141,10 +167,19 @@ export const updateSessionRoom = async (
   dto: UpdateSessionRoomDto,
 ) => {
   const session = await getSessionOrThrow(sessionId);
-  assertOpen(session.status);
+  // FIX: allow DRAFT too
+  assertDraftOrOpen(session.status);
   const sessionRoom = await getSessionRoomOrThrow(sessionRoomId, sessionId);
 
-  if (dto.usedCapacity > sessionRoom.room.capacity) {
+  // FIX: block updates on locked rooms
+  if (sessionRoom.lockedAt) {
+    throw new AppError("Cannot update a locked room", 400);
+  }
+
+  if (
+    dto.usedCapacity !== undefined &&
+    dto.usedCapacity > sessionRoom.room.capacity
+  ) {
     throw new AppError(
       `usedCapacity (${dto.usedCapacity}) cannot exceed room capacity (${sessionRoom.room.capacity})`,
       400,
@@ -162,8 +197,17 @@ export const removeRoomFromSession = async (
   sessionRoomId: string,
 ) => {
   const session = await getSessionOrThrow(sessionId);
-  assertOpen(session.status);
-  await getSessionRoomOrThrow(sessionRoomId, sessionId);
+  // FIX: allow DRAFT too
+  assertDraftOrOpen(session.status);
+  const sessionRoom = await getSessionRoomOrThrow(sessionRoomId, sessionId);
+
+  // FIX: cannot remove a locked room
+  if (sessionRoom.lockedAt) {
+    throw new AppError(
+      "Cannot remove a locked room — unlock it first or contact admin",
+      400,
+    );
+  }
 
   // onDelete: Cascade handles candidate and surveillant assignments
   await identityDb.sessionRoom.delete({ where: { id: sessionRoomId } });
@@ -172,6 +216,7 @@ export const removeRoomFromSession = async (
 // ─── AUTO ASSIGN ──────────────────────────────────────────────────────────────
 export const autoAssign = async (sessionId: string) => {
   const session = await getSessionOrThrow(sessionId);
+  // auto-assign only makes sense when session is OPEN
   assertOpen(session.status);
 
   const sessionRooms = await identityDb.sessionRoom.findMany({
@@ -180,45 +225,54 @@ export const autoAssign = async (sessionId: string) => {
     orderBy: { room: { name: "asc" } },
   });
 
-  if (sessionRooms.length === 0)
+  if (sessionRooms.length === 0) {
     throw new AppError("No rooms added to this session", 400);
+  }
 
   const candidates = await identityDb.candidate.findMany({
     where: { sessionId, status: "REGISTERED" },
     orderBy: { registrationNumber: "asc" },
   });
 
+  if (candidates.length === 0) {
+    throw new AppError("No registered candidates in this session", 400);
+  }
+
+  // FIX: use effective capacity (usedCapacity if set, else room.capacity)
   const totalCapacity = sessionRooms.reduce(
-    (sum, sr) => sum + sr.room.capacity,
+    (sum, sr) => sum + getEffectiveCapacity(sr),
     0,
   );
-  const candidateCount = candidates.length;
 
-  if (candidateCount === 0)
-    throw new AppError("No registered candidates in this session", 400);
-
-  if (totalCapacity < candidateCount) {
+  if (totalCapacity < candidates.length) {
     throw new AppError(
-      `Not enough capacity: ${candidateCount} candidates but only ${totalCapacity} slots. Gap: ${candidateCount - totalCapacity}`,
+      `Not enough capacity: ${candidates.length} candidates but only ${totalCapacity} slots available. Gap: ${candidates.length - totalCapacity}`,
       400,
     );
   }
 
-  // Clear existing candidate assignments for this session
+  // Clear existing candidate assignments before re-assigning
   await identityDb.roomCandidateAssignment.deleteMany({ where: { sessionId } });
 
-  // Fill rooms in order
   const assignments: {
     sessionRoomId: string;
     candidateId: string;
     sessionId: string;
   }[] = [];
-  const summary: { roomName: string; capacity: number; assigned: number }[] =
-    [];
+
+  const summary: {
+    roomName: string;
+    capacity: number;
+    effectiveCapacity: number;
+    assigned: number;
+  }[] = [];
 
   let cursor = 0;
   for (const sr of sessionRooms) {
-    const chunk = candidates.slice(cursor, cursor + sr.room.capacity);
+    // FIX: fill using effective capacity not raw room.capacity
+    const effective = getEffectiveCapacity(sr);
+    const chunk = candidates.slice(cursor, cursor + effective);
+
     for (const candidate of chunk) {
       assignments.push({
         sessionRoomId: sr.id,
@@ -226,17 +280,20 @@ export const autoAssign = async (sessionId: string) => {
         sessionId,
       });
     }
+
     summary.push({
       roomName: sr.room.name,
       capacity: sr.room.capacity,
+      effectiveCapacity: effective,
       assigned: chunk.length,
     });
+
     cursor += chunk.length;
   }
 
   await identityDb.roomCandidateAssignment.createMany({ data: assignments });
 
-  // Update usedCapacity on each sessionRoom
+  // Update usedCapacity on each sessionRoom to reflect actual assignments
   for (const sr of sessionRooms) {
     const assigned = assignments.filter(
       (a) => a.sessionRoomId === sr.id,
@@ -247,7 +304,10 @@ export const autoAssign = async (sessionId: string) => {
     });
   }
 
-  return { assigned: assignments.length, rooms: summary };
+  return {
+    assigned: assignments.length,
+    rooms: summary,
+  };
 };
 
 // ─── ASSIGN SURVEILLANT ───────────────────────────────────────────────────────
@@ -257,15 +317,20 @@ export const assignSurveillant = async (
   dto: AssignSurveillantDto,
 ) => {
   const session = await getSessionOrThrow(sessionId);
-  assertOpen(session.status);
+  // FIX: allow DRAFT too — coordinator plans surveillants before opening
+  assertDraftOrOpen(session.status);
   const sessionRoom = await getSessionRoomOrThrow(sessionRoomId, sessionId);
 
-  // User must exist and be active
+  // FIX: cannot assign to locked room
+  if (sessionRoom.lockedAt) {
+    throw new AppError("Cannot assign surveillant to a locked room", 400);
+  }
+
   const user = await identityDb.user.findUnique({ where: { id: dto.userId } });
   if (!user) throw new AppError("User not found", 404);
   if (!user.isActive) throw new AppError("User is inactive", 400);
 
-  // Must be a SURVEILLANT in this session's formation
+  // Must be registered as SURVEILLANT in this session's formation
   const staffRecord = await identityDb.formationStaff.findFirst({
     where: {
       formationId: session.formationId,
@@ -273,33 +338,36 @@ export const assignSurveillant = async (
       role: "SURVEILLANT",
     },
   });
-  if (!staffRecord)
+  if (!staffRecord) {
     throw new AppError(
       "User is not a registered surveillant for this formation",
       403,
     );
+  }
 
   // Check duplicate
   const existing = await identityDb.roomSurveillantAssignment.findUnique({
     where: { sessionRoomId_userId: { sessionRoomId, userId: dto.userId } },
   });
-  if (existing)
+  if (existing) {
     throw new AppError("Surveillant already assigned to this room", 409);
+  }
 
   const assignment = await identityDb.roomSurveillantAssignment.create({
     data: { sessionRoomId, userId: dto.userId, sessionId },
   });
 
-  // Warn if below 2 surveillants
+  // Count surveillants after assignment to warn if below minimum
   const surveillantCount = await identityDb.roomSurveillantAssignment.count({
     where: { sessionRoomId },
   });
+
   const warning =
     surveillantCount < 2
-      ? `Room currently has ${surveillantCount} surveillant(s). Minimum recommended is 2.`
+      ? `Room currently has ${surveillantCount} surveillant(s). Minimum required is 2.`
       : undefined;
 
-  // Send email notification
+  // Send assignment email — fire and forget
   try {
     const candidateCount = await identityDb.roomCandidateAssignment.count({
       where: { sessionRoomId },
@@ -330,8 +398,14 @@ export const removeSurveillant = async (
   sessionRoomId: string,
   userId: string,
 ) => {
-  await getSessionOrThrow(sessionId);
-  await getSessionRoomOrThrow(sessionRoomId, sessionId);
+  const session = await getSessionOrThrow(sessionId);
+  assertDraftOrOpen(session.status);
+  const sessionRoom = await getSessionRoomOrThrow(sessionRoomId, sessionId);
+
+  // FIX: cannot remove surveillant from locked room
+  if (sessionRoom.lockedAt) {
+    throw new AppError("Cannot remove surveillant from a locked room", 400);
+  }
 
   const assignment = await identityDb.roomSurveillantAssignment.findUnique({
     where: { sessionRoomId_userId: { sessionRoomId, userId } },
@@ -350,11 +424,40 @@ export const lockRoom = async (
   lockedBy: string,
 ) => {
   const session = await getSessionOrThrow(sessionId);
+  // lock only makes sense when session is OPEN
   assertOpen(session.status);
-  await getSessionRoomOrThrow(sessionRoomId, sessionId);
+  const sessionRoom = await getSessionRoomOrThrow(sessionRoomId, sessionId);
+
+  // Cannot lock already locked room
+  if (sessionRoom.lockedAt) {
+    throw new AppError("Room is already locked", 400);
+  }
+
+  // FIX: enforce minimum 2 surveillants before allowing lock
+  const surveillantCount = await identityDb.roomSurveillantAssignment.count({
+    where: { sessionRoomId },
+  });
+  if (surveillantCount < 2) {
+    throw new AppError(
+      `Cannot lock room — only ${surveillantCount} surveillant(s) assigned. Minimum required is 2.`,
+      400,
+    );
+  }
+
+  // Cannot lock a room with no candidates assigned
+  const candidateCount = await identityDb.roomCandidateAssignment.count({
+    where: { sessionRoomId },
+  });
+  if (candidateCount === 0) {
+    throw new AppError(
+      "Cannot lock an empty room — assign candidates first",
+      400,
+    );
+  }
 
   return identityDb.sessionRoom.update({
     where: { id: sessionRoomId },
     data: { lockedAt: new Date(), lockedBy },
+    include: { room: true },
   });
 };

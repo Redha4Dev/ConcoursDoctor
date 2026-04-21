@@ -10,6 +10,12 @@ import {
   setGradingConfigSchema,
 } from "./sessions.types.js";
 import * as sessionsController from "./sessions.controller.js";
+import {
+  addRoomToSessionSchema,
+  updateSessionRoomSchema,
+  assignSurveillantSchema,
+} from "../rooms/rooms.types.js";
+import * as roomsController from "../rooms/rooms.controller.js";
 
 const router = Router();
 
@@ -24,8 +30,6 @@ router.post(
 
 router.get("/", sessionsController.getSessions);
 router.get("/:id", sessionsController.getSessionById);
-
-
 
 router.patch(
   "/:id",
@@ -69,6 +73,50 @@ router.patch(
   sessionsController.openSession,
 );
 
+router.post(
+  "/:id/rooms",
+  restrictTo("ADMIN", "COORDINATOR"),
+  validate(addRoomToSessionSchema),
+  roomsController.addRoomToSession,
+);
 
+router.get("/:id/rooms", roomsController.getSessionRooms);
+
+router.patch(
+  "/:id/rooms/:sessionRoomId",
+  restrictTo("ADMIN", "COORDINATOR"),
+  validate(updateSessionRoomSchema),
+  roomsController.updateSessionRoom,
+);
+
+router.delete(
+  "/:id/rooms/:sessionRoomId",
+  restrictTo("ADMIN", "COORDINATOR"),
+  roomsController.removeRoomFromSession,
+);
+router.post(
+  "/:id/rooms/auto-assign",
+  restrictTo("ADMIN", "COORDINATOR"),
+  roomsController.autoAssign,
+);
+
+router.post(
+  "/:id/rooms/:sessionRoomId/surveillants",
+  restrictTo("ADMIN", "COORDINATOR"),
+  validate(assignSurveillantSchema),
+  roomsController.assignSurveillant,
+);
+
+router.delete(
+  "/:id/rooms/:sessionRoomId/surveillants/:userId",
+  restrictTo("ADMIN", "COORDINATOR"),
+  roomsController.removeSurveillant,
+);
+
+router.post(
+  "/:id/rooms/:sessionRoomId/lock",
+  restrictTo("ADMIN", "COORDINATOR"),
+  roomsController.lockRoom,
+);
 
 export default router;

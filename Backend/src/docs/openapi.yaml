@@ -38,6 +38,8 @@ tags:
     description: Competition session management
   - name: Candidates
     description: Candidate import, listing, and management
+  - name: Rooms
+    description: Room management and session room assignments
 
 # ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
 components:
@@ -1381,8 +1383,34 @@ paths:
                         $ref: "#/components/schemas/FormationDetail"
         "404":
           description: Formation not found
+    patch:
+      summary: PATCH /api/v1/formations/{id}
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
 
   /api/v1/formations/{id}/staff:
+    get:
+      summary: GET /api/v1/formations/{id}/staff
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
     post:
       summary: Assign staff to formation
       description: |
@@ -1532,8 +1560,34 @@ paths:
                         $ref: "#/components/schemas/SessionDetail"
         "404":
           description: Session not found
+    patch:
+      summary: PATCH /api/v1/sessions/{id}
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
 
   /api/v1/sessions/{id}/subjects:
+    get:
+      summary: GET /api/v1/sessions/{id}/subjects
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
     post:
       summary: Add subject to session
       description: |
@@ -1587,6 +1641,19 @@ paths:
           description: Session not found
 
   /api/v1/sessions/{id}/grading-config:
+    get:
+      summary: GET /api/v1/sessions/{id}/grading-config
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Success
     patch:
       summary: Set grading configuration
       description: |
@@ -1839,3 +1906,268 @@ paths:
           description: Cannot delete after session is locked
         "404":
           description: Candidate not found
+
+  /api/v1/sessions/{id}/staff:
+    get:
+      summary: GET /api/v1/sessions/{id}/staff
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/subjects/{subjectId}:
+    patch:
+      summary: PATCH /api/v1/sessions/{id}/subjects/{subjectId}
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+    delete:
+      summary: DELETE /api/v1/sessions/{id}/subjects/{subjectId}
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/status:
+    patch:
+      summary: PATCH /api/v1/sessions/{id}/status
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/rooms:
+    get:
+      summary: GET /api/v1/sessions/{id}/rooms
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+    post:
+      summary: POST /api/v1/sessions/{id}/rooms
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/rooms/auto-assign:
+    post:
+      summary: POST /api/v1/sessions/{id}/rooms/auto-assign
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}:
+    patch:
+      summary: PATCH /api/v1/sessions/{id}/rooms/{sessionRoomId}
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+    delete:
+      summary: DELETE /api/v1/sessions/{id}/rooms/{sessionRoomId}
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants:
+    post:
+      summary: POST /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}:
+    delete:
+      summary: DELETE /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/lock:
+    post:
+      summary: POST /api/v1/sessions/{id}/rooms/{sessionRoomId}/lock
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+
+  # == ROOMS ===================================================================
+  /api/v1/rooms:
+    get:
+      summary: GET /api/v1/rooms
+      tags: [Rooms]
+      responses:
+        200:
+          description: Success
+    post:
+      summary: POST /api/v1/rooms
+      tags: [Rooms]
+      responses:
+        200:
+          description: Success
+
+  /api/v1/rooms/{id}:
+    patch:
+      summary: PATCH /api/v1/rooms/{id}
+      tags: [Rooms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success
+    delete:
+      summary: DELETE /api/v1/rooms/{id}
+      tags: [Rooms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Success

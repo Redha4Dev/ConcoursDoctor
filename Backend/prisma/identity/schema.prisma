@@ -246,14 +246,38 @@ model Candidate {
   id                 String          @id @default(uuid())
   sessionId          String
   registrationNumber String
+
+  // ── French name (required) ─────────────────────────────────────────────────
   firstName          String
   lastName           String
+
+  // ── Arabic name (from PROGRES) ─────────────────────────────────────────────
+  firstNameAr        String?
+  lastNameAr         String?
+
+  // ── Contact ────────────────────────────────────────────────────────────────
   email              String?
   phoneNumber        String?
+  address            String?         // Adresse de Résidence
+
+  // ── Identity ───────────────────────────────────────────────────────────────
+  dateOfBirth        String?         // stored as string — PROGRES format varies
+  birthPlace         String?         // Lieu Naissance
   nationalId         String?
-  degreeTitle        String?
-  degreeInstitution  String?
-  graduationYear     Int?
+
+  // ── Degree info ────────────────────────────────────────────────────────────
+  degreeInstitution  String?         // Etablissement (diplômé)
+  degreeSpeciality   String?         // Spécialité diplôme — replaces degreeTitle
+  fieldOfStudy       String?         // Filière (Informatique)
+  cursusType         String?         // LMD / CLASSIQUE BAC+5
+  graduationYear     Int?            // Année de diplôme
+
+  // ── Tie-breaker fields (ministerial regulation — ranking) ──────────────────
+  masterClassCategory String?        // catégorie de classement Master
+  masterAverage       Float?         // moyenne de classement Master (tie-breaker 2)
+  bachelorAverage     Float?         // moyenne avant-dernière année (tie-breaker 3)
+
+  // ── System fields ──────────────────────────────────────────────────────────
   status             CandidateStatus @default(REGISTERED)
   importBatchId      String?
   importedAt         DateTime        @default(now())
@@ -266,6 +290,7 @@ model Candidate {
   @@unique([sessionId, registrationNumber])
   @@map("candidates")
 }
+
 
 model ImportBatch {
   id               String       @id @default(uuid())
