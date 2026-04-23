@@ -425,6 +425,13 @@ components:
                   examDate:
                     type: string
                     format: date-time
+                  academicYear:
+                    type: string
+                  _count:
+                    type: object
+                    properties:
+                      candidates:
+                        type: integer
 
     CreateFormationBody:
       type: object
@@ -447,6 +454,21 @@ components:
           type: string
           example: Formation doctorale en informatique quantique
 
+    # UPDATED — isActive added, code is intentionally excluded (immutable identifier)
+    UpdateFormationBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        department:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        isActive:
+          type: boolean
+
     AssignStaffBody:
       type: object
       required: [userId, role]
@@ -457,6 +479,38 @@ components:
         role:
           type: string
           enum: [COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+
+    # UPDATED — FormationStaff item shape (returned by GET /formations/:id/staff and GET /sessions/:id/staff)
+    FormationStaffItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        formationId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/Role"
+        assignedAt:
+          type: string
+          format: date-time
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            firstName:
+              type: string
+            lastName:
+              type: string
+            email:
+              type: string
+            role:
+              $ref: "#/components/schemas/Role"
+            isActive:
+              type: boolean
 
     # ── Session ───────────────────────────────────────────────────────────────
     SessionSummary:
@@ -485,9 +539,10 @@ components:
         examDate:
           type: string
           format: date-time
-        examRoom:
+        resultsDeadline:
           type: string
-          nullable: true
+          format: date-time
+          description: Computed as examDate + 5 days
         createdAt:
           type: string
           format: date-time
@@ -527,6 +582,7 @@ components:
             gradingConfig:
               $ref: "#/components/schemas/GradingConfig"
 
+    # UPDATED — examRoom removed (rooms now managed via /sessions/:id/rooms)
     CreateSessionBody:
       type: object
       required: [formationId, academicYear, label, availableSlots, examDate]
@@ -550,9 +606,34 @@ components:
           type: string
           format: date-time
           example: 2026-04-14T09:00:00.000Z
-        examRoom:
+
+    # UPDATED — reflects sessions.types.ts updateSessionSchema exactly
+    UpdateSessionBody:
+      type: object
+      properties:
+        coordinatorId:
           type: string
-          example: Amphi A
+          format: uuid
+          description: Re-assign the session coordinator
+        academicYear:
+          type: string
+          minLength: 1
+        label:
+          type: string
+          minLength: 1
+        availableSlots:
+          type: integer
+          minimum: 1
+        examDate:
+          type: string
+          format: date-time
+          description: Recomputes resultsDeadline (examDate + 5 days) automatically
+        attendanceDeadline:
+          type: string
+          format: date-time
+        correctionDeadline:
+          type: string
+          format: date-time
 
     Subject:
       type: object
@@ -614,15 +695,21 @@ components:
           type: number
           example: 3
           description: Default 3 points — per ministerial regulation
+        isDefault:
+          type: boolean
+          description: true when no config has been saved yet (returns default shape)
         configuredAt:
           type: string
           format: date-time
+          nullable: true
         configuredBy:
           type: string
           format: uuid
+          nullable: true
 
     SetGradingConfigBody:
       type: object
+      required: [discrepancyThreshold]
       properties:
         discrepancyThreshold:
           type: number
@@ -631,7 +718,239 @@ components:
           default: 3
           example: 3
 
+    # ── Room (global) ─────────────────────────────────────────────────────────
+    # NEW
+    Room:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Amphi A
+        building:
+          type: string
+          nullable: true
+          example: Bâtiment Principal
+        floor:
+          type: string
+          nullable: true
+          example: RDC
+        capacity:
+          type: integer
+          example: 60
+        isActive:
+          type: boolean
+          example: true
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    # NEW
+    CreateRoomBody:
+      type: object
+      required: [name, capacity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Amphi A
+        capacity:
+          type: integer
+          minimum: 1
+          example: 60
+        building:
+          type: string
+          example: Bâtiment Principal
+        floor:
+          type: string
+          example: RDC
+
+    # NEW
+    UpdateRoomBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        capacity:
+          type: integer
+          minimum: 1
+        building:
+          type: string
+        floor:
+          type: string
+
+    # ── Session Room ──────────────────────────────────────────────────────────
+    # NEW
+    SessionRoom:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        usedCapacity:
+          type: integer
+          nullable: true
+          description: Override capacity set by coordinator. Falls back to room.capacity if null.
+        lockedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lockedBy:
+          type: string
+          format: uuid
+          nullable: true
+        room:
+          $ref: "#/components/schemas/Room"
+
+    # NEW — full session room detail with candidate + surveillant assignments
+    SessionRoomDetail:
+      allOf:
+        - $ref: "#/components/schemas/SessionRoom"
+        - type: object
+          properties:
+            candidateAssignments:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  candidate:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      firstName:
+                        type: string
+                      lastName:
+                        type: string
+                      registrationNumber:
+                        type: string
+            surveillantAssignments:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      firstName:
+                        type: string
+                      lastName:
+                        type: string
+                      email:
+                        type: string
+            _count:
+              type: object
+              properties:
+                candidateAssignments:
+                  type: integer
+                surveillantAssignments:
+                  type: integer
+
+    # NEW
+    AddRoomToSessionBody:
+      type: object
+      required: [roomId]
+      properties:
+        roomId:
+          type: string
+          format: uuid
+          description: ID of an active global Room to link to this session
+
+    # NEW
+    UpdateSessionRoomBody:
+      type: object
+      required: [usedCapacity]
+      properties:
+        usedCapacity:
+          type: integer
+          minimum: 0
+          description: Override effective capacity for this room in this session. Cannot exceed room.capacity.
+
+    # NEW
+    AssignSurveillantBody:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: User ID of a SURVEILLANT registered to this session's formation
+
+    # NEW — returned by POST /sessions/:id/rooms/auto-assign
+    AutoAssignResult:
+      type: object
+      properties:
+        assigned:
+          type: integer
+          example: 87
+          description: Total number of candidate assignments created
+        rooms:
+          type: array
+          items:
+            type: object
+            properties:
+              roomName:
+                type: string
+              capacity:
+                type: integer
+                description: Raw room capacity
+              effectiveCapacity:
+                type: integer
+                description: Effective capacity used (usedCapacity if set, else capacity)
+              assigned:
+                type: integer
+                description: Number of candidates assigned to this room
+
+    # NEW — returned by POST /sessions/:id/rooms/:sessionRoomId/surveillants
+    SurveillantAssignmentResult:
+      type: object
+      properties:
+        assignment:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            sessionRoomId:
+              type: string
+              format: uuid
+            userId:
+              type: string
+              format: uuid
+            sessionId:
+              type: string
+              format: uuid
+        warning:
+          type: string
+          nullable: true
+          description: Warning when fewer than 2 surveillants are assigned to the room
+
     # ── Candidates ────────────────────────────────────────────────────────────
+    # UPDATED — added PROGRES fields: firstNameAr, lastNameAr, address, dateOfBirth,
+    #           birthPlace, degreeSpeciality (replaces degreeTitle), fieldOfStudy,
+    #           cursusType, masterClassCategory, masterAverage, bachelorAverage
     Candidate:
       type: object
       properties:
@@ -643,13 +962,23 @@ components:
           format: uuid
         registrationNumber:
           type: string
-          example: 2026001
+          example: "2026001"
         firstName:
           type: string
           example: Ahmed
         lastName:
           type: string
           example: Benali
+        firstNameAr:
+          type: string
+          nullable: true
+          example: أحمد
+          description: Arabic first name from PROGRES
+        lastNameAr:
+          type: string
+          nullable: true
+          example: بنعلي
+          description: Arabic last name from PROGRES
         email:
           type: string
           nullable: true
@@ -657,23 +986,68 @@ components:
         phoneNumber:
           type: string
           nullable: true
+        address:
+          type: string
+          nullable: true
+          description: Adresse de Résidence
+        dateOfBirth:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date de Naissance
+        birthPlace:
+          type: string
+          nullable: true
+          description: Lieu Naissance
         nationalId:
           type: string
           nullable: true
-        degreeTitle:
-          type: string
-          nullable: true
-          example: Master Informatique
         degreeInstitution:
           type: string
           nullable: true
           example: USTHB
+          description: Etablissement (diplômé)
+        degreeSpeciality:
+          type: string
+          nullable: true
+          example: Informatique
+          description: Spécialité diplôme — replaces degreeTitle
+        fieldOfStudy:
+          type: string
+          nullable: true
+          example: Génie Informatique
+          description: Filière
+        cursusType:
+          type: string
+          nullable: true
+          example: LMD
+          description: "Type Cursus — e.g.: LMD, CLASSIQUE BAC+5"
         graduationYear:
           type: integer
           nullable: true
           example: 2024
+        masterClassCategory:
+          type: string
+          nullable: true
+          description: Catégorie de classement Master (tie-breaker from ministerial regulation)
+        masterAverage:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 20
+          description: Moyenne de classement Master (tie-breaker)
+        bachelorAverage:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 20
+          description: "Moyenne générale de l'avant dernière année de la formation graduée"
         status:
           $ref: "#/components/schemas/CandidateStatus"
+        importBatchId:
+          type: string
+          format: uuid
+          nullable: true
         importedAt:
           type: string
           format: date-time
@@ -739,7 +1113,7 @@ components:
         skipped:
           type: integer
           example: 1
-          description: Duplicate registration numbers
+          description: Duplicate registration numbers skipped
         invalid:
           type: integer
           example: 2
@@ -1304,7 +1678,7 @@ paths:
   /api/v1/formations:
     get:
       summary: List all formations
-      description: Returns all doctoral formations with session and staff counts.
+      description: Returns all doctoral formations with session and staff counts. Any authenticated user.
       tags: [Formations]
       responses:
         "200":
@@ -1360,7 +1734,7 @@ paths:
   /api/v1/formations/{id}:
     get:
       summary: Get formation by ID
-      description: Returns formation detail with sessions and staff list.
+      description: Returns formation detail with sessions (including candidate count) and staff list. Any authenticated user.
       tags: [Formations]
       parameters:
         - name: id
@@ -1381,10 +1755,18 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/FormationDetail"
+        "401":
+          description: Not authenticated
         "404":
           description: Formation not found
+
+    # UPDATED — added requestBody, proper description, error codes
     patch:
-      summary: PATCH /api/v1/formations/{id}
+      summary: Update formation
+      description: |
+        Update formation name, department, description, or isActive flag.
+        Formation code cannot be changed (it is an immutable identifier).
+        Admin only.
       tags: [Formations]
       parameters:
         - name: id
@@ -1393,13 +1775,41 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFormationBody"
+            example:
+              name: Doctorat en Informatique Avancée
+              isActive: false
       responses:
         "200":
-          description: Success
+          description: Formation updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FormationSummary"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "404":
+          description: Formation not found
 
   /api/v1/formations/{id}/staff:
+    # UPDATED — was a stub, now fully documented
     get:
-      summary: GET /api/v1/formations/{id}/staff
+      summary: List formation staff
+      description: |
+        Returns all staff members assigned to a formation, including their user info and role.
+        Any authenticated user.
       tags: [Formations]
       parameters:
         - name: id
@@ -1410,13 +1820,30 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Success
+          description: List of formation staff
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/FormationStaffItem"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Formation not found
+
     post:
       summary: Assign staff to formation
       description: |
         Assign a user to a formation with a specific role.
         The user's system role must match the assigned formation role.
-        A user can be assigned to multiple formations.
+        A user can hold multiple roles across multiple formations.
+        Formation must be active. User must be active.
         Admin only.
       tags: [Formations]
       parameters:
@@ -1437,13 +1864,22 @@ paths:
               role: CORRECTOR
       responses:
         "200":
-          description: Staff assigned successfully
+          description: Staff assigned successfully — assignment email sent to user
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FormationStaffItem"
         "400":
-          description: Role mismatch — user's system role does not match
+          description: Role mismatch (user's system role ≠ assigned role) or formation/user is inactive
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
         "404":
           description: Formation or user not found
         "409":
@@ -1452,7 +1888,9 @@ paths:
   /api/v1/formations/{id}/staff/{userId}:
     delete:
       summary: Remove staff from formation
-      description: Remove a user's staff assignment from a formation. Admin only.
+      description: |
+        Remove a user's staff assignment from a formation.
+        Admin only.
       tags: [Formations]
       parameters:
         - name: id
@@ -1474,6 +1912,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
         "404":
           description: Staff assignment not found
 
@@ -1481,7 +1923,7 @@ paths:
   /api/v1/sessions:
     get:
       summary: List all sessions
-      description: Returns all competition sessions with formation, coordinator, and candidate count.
+      description: Returns all competition sessions with formation, coordinator, and candidate/subject counts. Any authenticated user.
       tags: [Sessions]
       responses:
         "200":
@@ -1502,7 +1944,12 @@ paths:
 
     post:
       summary: Create session
-      description: Create a new competition session linked to a formation. Admin or Coordinator.
+      description: |
+        Create a new competition session linked to a formation.
+        Session is created in DRAFT status.
+        resultsDeadline is automatically computed as examDate + 5 days.
+        The authenticated user becomes the coordinatorId.
+        Admin or Coordinator only.
       tags: [Sessions]
       requestBody:
         required: true
@@ -1512,14 +1959,13 @@ paths:
               $ref: "#/components/schemas/CreateSessionBody"
             example:
               formationId: 123e4567-e89b-12d3-a456-426614174000
-              academicYear: 2025/2026
+              academicYear: "2025/2026"
               label: Concours Doctorat Informatique 2025/2026
               availableSlots: 20
               examDate: "2026-04-14T09:00:00.000Z"
-              examRoom: Amphi A
       responses:
         "201":
-          description: Session created
+          description: Session created (status = DRAFT)
           content:
             application/json:
               schema:
@@ -1530,14 +1976,18 @@ paths:
                       data:
                         $ref: "#/components/schemas/SessionSummary"
         "400":
-          description: Validation error
+          description: Validation error or formation is inactive
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
         "404":
           description: Formation not found
 
   /api/v1/sessions/{id}:
     get:
       summary: Get session by ID
-      description: Returns full session detail including subjects and grading config.
+      description: Returns full session detail including subjects and grading config. Any authenticated user.
       tags: [Sessions]
       parameters:
         - name: id
@@ -1558,10 +2008,65 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/SessionDetail"
+        "401":
+          description: Not authenticated
         "404":
           description: Session not found
+
+    # UPDATED — added requestBody, proper description, error codes
     patch:
-      summary: PATCH /api/v1/sessions/{id}
+      summary: Update session
+      description: |
+        Update session fields. Session must be in DRAFT status.
+        Updating examDate automatically recomputes resultsDeadline (examDate + 5 days).
+        Status transitions are handled by a dedicated endpoint (PATCH /sessions/:id/status).
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionBody"
+            example:
+              availableSlots: 25
+              examDate: "2026-05-01T09:00:00.000Z"
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionSummary"
+        "400":
+          description: Validation error
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
+        "404":
+          description: Session not found
+
+  # UPDATED — was a stub, now fully documented
+  /api/v1/sessions/{id}/staff:
+    get:
+      summary: Get session staff
+      description: |
+        Returns all staff members assigned to the formation that this session belongs to.
+        Useful for populating corrector/surveillant selection dropdowns.
+        Any authenticated user.
       tags: [Sessions]
       parameters:
         - name: id
@@ -1572,11 +2077,31 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Success
+          description: Formation staff for this session's formation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Staff retrieved
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/FormationStaffItem"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
 
   /api/v1/sessions/{id}/subjects:
+    # UPDATED — was a stub, now fully documented
     get:
-      summary: GET /api/v1/sessions/{id}/subjects
+      summary: List session subjects
+      description: Returns all exam subjects defined for a session. Any authenticated user.
       tags: [Sessions]
       parameters:
         - name: id
@@ -1587,13 +2112,29 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Success
+          description: List of subjects
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Subject"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
+
     post:
       summary: Add subject to session
       description: |
         Add an exam subject with coefficient to a session.
         Can only be done while session is in DRAFT status.
-        Admin or Coordinator.
+        Admin or Coordinator only.
       tags: [Sessions]
       parameters:
         - name: id
@@ -1636,13 +2177,106 @@ paths:
                       data:
                         $ref: "#/components/schemas/Subject"
         "400":
-          description: Session is not in DRAFT status
+          description: Validation error
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
         "404":
           description: Session not found
 
+  /api/v1/sessions/{id}/subjects/{subjectId}:
+    # UPDATED — was a stub, now fully documented
+    patch:
+      summary: Update subject
+      description: |
+        Update a subject's name, coefficient, grades, or description.
+        Session must be in DRAFT status.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubjectBody"
+            example:
+              coefficient: 2
+      responses:
+        "200":
+          description: Subject updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Subject"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
+        "404":
+          description: Subject or session not found
+
+    # UPDATED — was a stub, now fully documented
+    delete:
+      summary: Delete subject
+      description: |
+        Remove a subject from a session.
+        Session must be in DRAFT status.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Subject deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
+        "404":
+          description: Subject or session not found
+
   /api/v1/sessions/{id}/grading-config:
+    # UPDATED — was a stub, now fully documented
     get:
-      summary: GET /api/v1/sessions/{id}/grading-config
+      summary: Get grading configuration
+      description: |
+        Returns the current grading configuration for this session.
+        If not yet configured, returns the default shape `{ discrepancyThreshold: 3, isDefault: true }` — never 404.
+        Any authenticated user.
       tags: [Sessions]
       parameters:
         - name: id
@@ -1653,14 +2287,29 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Success
+          description: Grading config (or default shape if not configured)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GradingConfig"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
+
     patch:
       summary: Set grading configuration
       description: |
         Configure the discrepancy threshold for this session.
         Default is 3 points per ministerial regulation (Note n°573).
-        Creates config if not exists, updates if already set.
-        Admin or Coordinator.
+        Creates config if not exists, updates if already set (upsert).
+        Session must be in DRAFT status.
+        Admin or Coordinator only.
       tags: [Sessions]
       parameters:
         - name: id
@@ -1689,18 +2338,452 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/GradingConfig"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
         "404":
           description: Session not found
+
+  # UPDATED — was a stub, now fully documented
+  /api/v1/sessions/{id}/status:
+    patch:
+      summary: Open session (DRAFT → OPEN)
+      description: |
+        Transition a session from DRAFT to OPEN status.
+        Pre-conditions (all must pass):
+          1. Session must currently be in DRAFT status
+          2. At least one subject must be defined
+          3. Grading config must be set
+          4. At least one candidate must have been imported
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session opened (status now OPEN)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionSummary"
+        "400":
+          description: |
+            Pre-condition not met — one of:
+            - No subjects defined
+            - Grading config not set
+            - No candidates imported
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
+        "404":
+          description: Session not found
+
+  # ══ SESSION ROOMS ════════════════════════════════════════════════════════════
+  /api/v1/sessions/{id}/rooms:
+    # UPDATED — was a stub, now fully documented
+    get:
+      summary: List session rooms
+      description: |
+        Returns all rooms linked to a session, including candidate and surveillant assignments.
+        Any authenticated user.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session rooms with assignment details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SessionRoomDetail"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
+
+    # UPDATED — was a stub, now fully documented
+    post:
+      summary: Add room to session
+      description: |
+        Link an existing active global Room to this session.
+        Allowed when session is in DRAFT or OPEN status.
+        A room can only be added once per session (unique constraint).
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddRoomToSessionBody"
+            example:
+              roomId: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        "201":
+          description: Room added to session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionRoom"
+        "400":
+          description: Room is inactive, or session status does not allow room management
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session not DRAFT/OPEN
+        "404":
+          description: Session or Room not found
+        "409":
+          description: Room already added to this session
+
+  # UPDATED — was a stub, now fully documented
+  /api/v1/sessions/{id}/rooms/auto-assign:
+    post:
+      summary: Auto-assign candidates to rooms
+      description: |
+        Distributes all REGISTERED candidates across the session's rooms in order of registration number.
+        Clears existing candidate assignments before re-assigning.
+        Uses effective capacity (usedCapacity if set by coordinator, otherwise room.capacity).
+        Fails if total capacity < candidate count.
+        Session must be in OPEN status.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidates distributed across rooms
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AutoAssignResult"
+        "400":
+          description: |
+            One of:
+            - No rooms added to this session
+            - No registered candidates in this session
+            - Not enough room capacity for all candidates
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not OPEN
+        "404":
+          description: Session not found
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}:
+    # UPDATED — was a stub, now fully documented
+    patch:
+      summary: Update session room
+      description: |
+        Update the effective capacity override for a room in this session.
+        Cannot exceed the room's physical capacity.
+        Cannot update a locked room.
+        Session must be DRAFT or OPEN.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionRoomBody"
+            example:
+              usedCapacity: 45
+      responses:
+        "200":
+          description: Session room updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionRoom"
+        "400":
+          description: usedCapacity exceeds room.capacity, or room is locked
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session not DRAFT/OPEN
+        "404":
+          description: Session or SessionRoom not found
+
+    # UPDATED — was a stub, now fully documented
+    delete:
+      summary: Remove room from session
+      description: |
+        Unlink a room from a session. Cascades deletion of all candidate and surveillant assignments.
+        Cannot remove a locked room.
+        Session must be DRAFT or OPEN.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Room removed from session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Room is locked — cannot remove
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session not DRAFT/OPEN
+        "404":
+          description: Session or SessionRoom not found
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants:
+    # UPDATED — was a stub, now fully documented
+    post:
+      summary: Assign surveillant to room
+      description: |
+        Assign a SURVEILLANT to a session room.
+        The user must be an active SURVEILLANT registered to this session's formation via FormationStaff.
+        Cannot assign to a locked room.
+        Session must be DRAFT or OPEN.
+        Returns a warning if the room has fewer than 2 surveillants after assignment.
+        Sends an assignment notification email to the surveillant.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignSurveillantBody"
+            example:
+              userId: 550e8400-e29b-41d4-a716-446655440001
+      responses:
+        "201":
+          description: Surveillant assigned (assignment email sent)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SurveillantAssignmentResult"
+        "400":
+          description: User is inactive, or room is locked
+        "401":
+          description: Not authenticated
+        "403":
+          description: |
+            Forbidden — Admin or Coordinator only, or session not DRAFT/OPEN,
+            or user is not a registered surveillant for this formation
+        "404":
+          description: Session, SessionRoom, or User not found
+        "409":
+          description: Surveillant already assigned to this room
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}:
+    # UPDATED — was a stub, now fully documented
+    delete:
+      summary: Remove surveillant from room
+      description: |
+        Remove a surveillant assignment from a session room.
+        Cannot remove from a locked room.
+        Session must be DRAFT or OPEN.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Surveillant removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Room is locked — cannot remove surveillant
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session not DRAFT/OPEN
+        "404":
+          description: Surveillant assignment not found
+
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/lock:
+    # UPDATED — was a stub, now fully documented
+    post:
+      summary: Lock session room
+      description: |
+        Lock a session room, freezing its candidate and surveillant assignments.
+        Pre-conditions:
+          1. Room must have ≥ 2 surveillants assigned
+          2. Room must have ≥ 1 candidate assigned
+          3. Room must not already be locked
+        Session must be OPEN.
+        Records lockedAt timestamp and lockedBy user ID.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Room locked
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionRoom"
+        "400":
+          description: |
+            One of:
+            - Room is already locked
+            - Fewer than 2 surveillants assigned
+            - No candidates assigned to this room
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only, or session is not OPEN
+        "404":
+          description: Session or SessionRoom not found
 
   # ══ CANDIDATES ══════════════════════════════════════════════════════════════
   /api/v1/candidates/{sessionId}/import:
     post:
       summary: Import candidates from CSV or Excel
+      # UPDATED — description updated to reflect multi-sheet PROGRES format
       description: |
         Upload a CSV or Excel file to import candidates into a session.
-        Each row is validated using Zod. Valid rows are saved, invalid rows are reported.
+
+        **PROGRES Excel format**: The file may contain multiple sheets (e.g. `LMD`, `BAC+5`, `AUTRES`).
+        Each sheet is processed independently. The `Feuil1` summary sheet is automatically skipped
+        when multiple sheets are present.
+
+        **Header detection**: The parser auto-detects the header row by scanning the first 6 rows
+        for a row containing "matricule candidat" or "matricule". This handles 2–4 header rows
+        that may precede the actual data in PROGRES exports.
+
+        Each row is validated using Zod. Valid rows are saved; invalid rows are reported in the response.
         Duplicate registration numbers in the same session are skipped gracefully.
         Returns a detailed summary of the import operation.
+
+        Session must be in DRAFT or OPEN status.
         Admin or Coordinator only.
       tags: [Candidates]
       parameters:
@@ -1721,10 +2804,14 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: CSV or Excel file (.csv, .xls, .xlsx) — max 10MB
+                  description: |
+                    CSV or Excel file (.csv, .xls, .xlsx) — max 10MB.
+                    Accepted MIME types: text/csv, application/vnd.ms-excel,
+                    application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,
+                    application/octet-stream.
       responses:
         "200":
-          description: Import completed
+          description: Import completed — partial success is still 200
           content:
             application/json:
               schema:
@@ -1735,14 +2822,18 @@ paths:
                       data:
                         $ref: "#/components/schemas/ImportResult"
         "400":
-          description: No file uploaded or session not in importable status
+          description: No file uploaded, unsupported file type, or session not in importable status (DRAFT or OPEN)
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
         "404":
           description: Session not found
 
   /api/v1/candidates/{sessionId}:
     get:
       summary: List candidates
-      description: Returns paginated list of candidates for a session with search and status filter.
+      description: Returns paginated list of candidates for a session with search and status filter. Any authenticated user.
       tags: [Candidates]
       parameters:
         - name: sessionId
@@ -1789,11 +2880,13 @@ paths:
                               $ref: "#/components/schemas/Candidate"
                           pagination:
                             $ref: "#/components/schemas/Pagination"
+        "401":
+          description: Not authenticated
 
   /api/v1/candidates/{sessionId}/stats:
     get:
       summary: Get candidate statistics
-      description: Returns count of candidates by status for a session.
+      description: Returns count of candidates by status for a session. Any authenticated user.
       tags: [Candidates]
       parameters:
         - name: sessionId
@@ -1814,11 +2907,13 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/CandidateStats"
+        "401":
+          description: Not authenticated
 
   /api/v1/candidates/{sessionId}/batches:
     get:
       summary: List import batches
-      description: Returns the history of all import operations for a session.
+      description: Returns the history of all import operations for a session. Any authenticated user.
       tags: [Candidates]
       parameters:
         - name: sessionId
@@ -1841,11 +2936,15 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/ImportBatch"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
 
   /api/v1/candidates/{sessionId}/{id}:
     get:
       summary: Get candidate by ID
-      description: Returns a single candidate's full details.
+      description: Returns a single candidate's full details. Any authenticated user.
       tags: [Candidates]
       parameters:
         - name: sessionId
@@ -1872,6 +2971,8 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Candidate"
+        "401":
+          description: Not authenticated
         "404":
           description: Candidate not found
 
@@ -1880,6 +2981,7 @@ paths:
       description: |
         Remove a candidate from a session.
         Only allowed while session status is DRAFT or OPEN.
+        Returns the deleted candidate's registrationNumber.
         Admin or Coordinator only.
       tags: [Candidates]
       parameters:
@@ -1901,252 +3003,107 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: Candidate removed successfully
+                          registrationNumber:
+                            type: string
+                            example: "2026001"
         "400":
-          description: Cannot delete after session is locked
+          description: Cannot delete candidates after session is locked (status ≠ DRAFT/OPEN)
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
         "404":
           description: Candidate not found
 
-  /api/v1/sessions/{id}/staff:
-    get:
-      summary: GET /api/v1/sessions/{id}/staff
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/subjects/{subjectId}:
-    patch:
-      summary: PATCH /api/v1/sessions/{id}/subjects/{subjectId}
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: subjectId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-    delete:
-      summary: DELETE /api/v1/sessions/{id}/subjects/{subjectId}
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: subjectId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/status:
-    patch:
-      summary: PATCH /api/v1/sessions/{id}/status
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/rooms:
-    get:
-      summary: GET /api/v1/sessions/{id}/rooms
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-    post:
-      summary: POST /api/v1/sessions/{id}/rooms
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/rooms/auto-assign:
-    post:
-      summary: POST /api/v1/sessions/{id}/rooms/auto-assign
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/rooms/{sessionRoomId}:
-    patch:
-      summary: PATCH /api/v1/sessions/{id}/rooms/{sessionRoomId}
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: sessionRoomId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-    delete:
-      summary: DELETE /api/v1/sessions/{id}/rooms/{sessionRoomId}
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: sessionRoomId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants:
-    post:
-      summary: POST /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: sessionRoomId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}:
-    delete:
-      summary: DELETE /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: sessionRoomId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
-  /api/v1/sessions/{id}/rooms/{sessionRoomId}/lock:
-    post:
-      summary: POST /api/v1/sessions/{id}/rooms/{sessionRoomId}/lock
-      tags: [Sessions]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: sessionRoomId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: Success
-
   # == ROOMS ===================================================================
   /api/v1/rooms:
+    # UPDATED — was a stub, now fully documented
     get:
-      summary: GET /api/v1/rooms
+      summary: List all rooms
+      description: |
+        Returns all active global rooms ordered by name.
+        Pass `showInactive=true` to include inactive rooms.
+        Any authenticated user.
       tags: [Rooms]
+      parameters:
+        - name: showInactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include inactive rooms in the response
       responses:
-        200:
-          description: Success
+        "200":
+          description: List of rooms
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Room"
+        "401":
+          description: Not authenticated
+
+    # UPDATED — was a stub, now fully documented
     post:
-      summary: POST /api/v1/rooms
+      summary: Create room
+      description: |
+        Create a new global exam room.
+        Room is active by default.
+        Admin only.
       tags: [Rooms]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoomBody"
+            example:
+              name: Amphi A
+              capacity: 60
+              building: Bâtiment Principal
+              floor: RDC
       responses:
-        200:
-          description: Success
+        "201":
+          description: Room created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Room"
+        "400":
+          description: Validation error
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
 
   /api/v1/rooms/{id}:
+    # UPDATED — was a stub, now fully documented
     patch:
-      summary: PATCH /api/v1/rooms/{id}
+      summary: Update room
+      description: |
+        Update a room's name, capacity, building, or floor.
+        Admin only.
       tags: [Rooms]
       parameters:
         - name: id
@@ -2155,11 +3112,44 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoomBody"
+            example:
+              capacity: 80
+              building: Annexe B
       responses:
-        200:
-          description: Success
+        "200":
+          description: Room updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Room"
+        "400":
+          description: Validation error
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "404":
+          description: Room not found
+
+    # UPDATED — was a stub, now fully documented
     delete:
-      summary: DELETE /api/v1/rooms/{id}
+      summary: Deactivate room
+      description: |
+        Soft-deactivate a room (isActive=false).
+        The room remains in the database and any existing session room links are preserved.
+        A deactivated room cannot be added to new sessions.
+        Admin only.
       tags: [Rooms]
       parameters:
         - name: id
@@ -2169,5 +3159,22 @@ paths:
             type: string
             format: uuid
       responses:
-        200:
-          description: Success
+        "200":
+          description: Room deactivated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Room"
+        "400":
+          description: Room is already inactive
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "404":
+          description: Room not found
