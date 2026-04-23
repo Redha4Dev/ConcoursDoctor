@@ -5,8 +5,7 @@ export const CreateSessionSchema = z.object({
   academicYear: z.string().regex(/^\d{4}\/\d{4}$/, "Format: 2025/2026"),
   label: z.string().min(2),
   availableSlots: z.number().int().positive(),
-  examDate: z.string().datetime(),
-  examRoom: z.string().optional(),
+  examDate: z.string().datetime()
 });
 
 export const updateSessionSchema = z.object({
@@ -15,7 +14,6 @@ export const updateSessionSchema = z.object({
   label: z.string().min(1).optional(),
   availableSlots: z.number().int().positive().optional(),
   examDate: z.coerce.date().optional(),
-  examRoom: z.string().optional(),
   attendanceDeadline: z.coerce.date().optional(),
   correctionDeadline: z.coerce.date().optional(),
   // status is NOT here — status transitions need dedicated endpoints later

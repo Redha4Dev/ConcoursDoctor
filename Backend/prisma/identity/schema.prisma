@@ -193,7 +193,6 @@ model CompetitionSession {
   status             SessionStatus @default(DRAFT)
   availableSlots     Int
   examDate           DateTime
-  examRoom           String?
   attendanceDeadline DateTime?
   correctionDeadline DateTime?
   resultsDeadline    DateTime? 

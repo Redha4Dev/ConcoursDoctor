@@ -21,7 +21,7 @@ const buildProfileCreate = (role: Role, dto: CreateUserDto) => {
       return {
         coordinatorProfile: {
           create: {
-            department: dto.department ?? null,
+            department:  dto.department  ?? null,
             phoneNumber: dto.phoneNumber ?? null,
           },
         },
@@ -39,8 +39,8 @@ const buildProfileCreate = (role: Role, dto: CreateUserDto) => {
         correctorProfile: {
           create: {
             specialization: dto.specialization ?? null,
-            academicGrade: dto.academicGrade ?? null,
-            institution: dto.institution ?? null,
+            academicGrade:  dto.academicGrade  ?? null,
+            institution:    dto.institution    ?? null,
           },
         },
       };
@@ -49,7 +49,7 @@ const buildProfileCreate = (role: Role, dto: CreateUserDto) => {
         juryMemberProfile: {
           create: {
             academicRank: dto.academicRank ?? null,
-            institution: dto.institution ?? null,
+            institution:  dto.institution  ?? null,
           },
         },
       };
@@ -66,10 +66,9 @@ const buildProfileCreate = (role: Role, dto: CreateUserDto) => {
   }
 };
 
-// ─── SERVICE FUNCTIONS ────────────────────────────────────────────────────────
+// ─── CREATE ───────────────────────────────────────────────────────────────────
 
 export const createUser = async (dto: CreateUserDto, createdBy: string) => {
-  // check email uniqueness
   const existing = await identityDb.user.findUnique({
     where: { email: dto.email },
   });
@@ -80,33 +79,33 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
 
   const user = await identityDb.user.create({
     data: {
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
+      firstName:          dto.firstName,
+      lastName:           dto.lastName,
+      email:              dto.email,
       passwordHash,
-      role: dto.role,
+      role:               dto.role,
       createdBy,
       mustChangePassword: true,
       ...buildProfileCreate(dto.role, dto),
     },
     select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      role: true,
-      isActive: true,
+      id:                 true,
+      firstName:          true,
+      lastName:           true,
+      email:              true,
+      role:               true,
+      isActive:           true,
       mustChangePassword: true,
-      createdAt: true,
+      createdAt:          true,
       coordinatorProfile: true,
       surveillantProfile: true,
-      correctorProfile: true,
-      juryMemberProfile: true,
-      auditorProfile: true,
+      correctorProfile:   true,
+      juryMemberProfile:  true,
+      auditorProfile:     true,
     },
   });
 
-  // send welcome email — fire and forget
+  // send welcome email — fire and forget, never blocks user creation
   const fullName = buildFullName(dto.firstName, dto.lastName);
   const { subject, html } = tempPasswordTemplate(
     fullName,
@@ -114,42 +113,51 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
     tempPassword,
     dto.role,
   );
+
   let emailSent = false;
   try {
     await sendEmail({ emailto: dto.email, subject, html });
     emailSent = true;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    console.error(`[Email] Failed to send welcome email to ${dto.email}:`, err);
+  } catch (err: unknown) {
+    console.error(
+      `[Email] Failed to send welcome email to ${dto.email}:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 
   return { user, emailSent };
 };
 
+// ─── LIST ─────────────────────────────────────────────────────────────────────
+
 export const getUsers = async (filters: {
   search?: string;
-  role?: string;
-  page?: number;
-  limit?: number;
+  role?:   string;
+  page?:   number;
+  limit?:  number;
 }) => {
   const { search, role, page = 1, limit = 20 } = filters;
   const skip = (page - 1) * limit;
 
-  if (role === "ADMIN") {
+  // FIX: reject ADMIN filter early — cleaner than letting Prisma handle it
+  if (role && role === "ADMIN") {
     throw new AppError("Cannot filter by ADMIN role", 400);
   }
 
+  // FIX: build role filter correctly — Prisma v7 doesn't support
+  // both `not` and `equals` on the same field simultaneously
+  const roleFilter: { equals?: Role; notIn?: Role[] } = role
+    ? { equals: role as Role, notIn: ["ADMIN"] }
+    : { notIn: ["ADMIN"] };
+
   const where = {
-    role: {
-      not: "ADMIN" as Role,
-      ...(role ? { equals: role as Role } : {}),
-    },
+    role: roleFilter,
     ...(search
       ? {
           OR: [
             { firstName: { contains: search, mode: "insensitive" as const } },
-            { lastName: { contains: search, mode: "insensitive" as const } },
-            { email: { contains: search, mode: "insensitive" as const } },
+            { lastName:  { contains: search, mode: "insensitive" as const } },
+            { email:     { contains: search, mode: "insensitive" as const } },
           ],
         }
       : {}),
@@ -159,20 +167,16 @@ export const getUsers = async (filters: {
     identityDb.user.findMany({
       where,
       select: {
-        id: true,
+        id:        true,
         firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        isActive: true,
+        lastName:  true,
+        email:     true,
+        role:      true,
+        isActive:  true,
         lastLogin: true,
         createdAt: true,
-        correctorProfile: {
-          select: { specialization: true, isAvailable: true },
-        },
-        juryMemberProfile: {
-          select: { academicRank: true, institution: true },
-        },
+        correctorProfile:   { select: { specialization: true, isAvailable: true } },
+        juryMemberProfile:  { select: { academicRank: true, institution: true } },
         coordinatorProfile: { select: { department: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -189,31 +193,33 @@ export const getUsers = async (filters: {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      hasNext: page * limit < total,
-      hasPrev: page > 1,
+      hasNext:    page * limit < total,
+      hasPrev:    page > 1,
     },
   };
 };
+
+// ─── GET BY ID ────────────────────────────────────────────────────────────────
 
 export const getUserById = async (id: string) => {
   const user = await identityDb.user.findUnique({
     where: { id },
     select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      role: true,
-      isActive: true,
+      id:                 true,
+      firstName:          true,
+      lastName:           true,
+      email:              true,
+      role:               true,
+      isActive:           true,
       mustChangePassword: true,
-      lastLogin: true,
-      createdAt: true,
-      updatedAt: true,
+      lastLogin:          true,
+      createdAt:          true,
+      updatedAt:          true,
       coordinatorProfile: true,
       surveillantProfile: true,
-      correctorProfile: true,
-      juryMemberProfile: true,
-      auditorProfile: true,
+      correctorProfile:   true,
+      juryMemberProfile:  true,
+      auditorProfile:     true,
       formationStaff: {
         include: {
           formation: { select: { id: true, name: true, code: true } },
@@ -225,140 +231,120 @@ export const getUserById = async (id: string) => {
   return user;
 };
 
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+
 export const updateUser = async (id: string, dto: UpdateUserDto) => {
   const user = await identityDb.user.findUnique({ where: { id } });
   if (!user) throw new AppError("User not found", 404);
 
+  // FIX: build profile update only if there are fields to update
+  // An empty `update: {}` causes Prisma to throw
   const buildProfileUpdate = () => {
     switch (user.role) {
-      case "COORDINATOR":
-        return {
-          coordinatorProfile: {
-            update: {
-              ...(dto.department !== undefined && {
-                department: dto.department,
-              }),
-              ...(dto.phoneNumber !== undefined && {
-                phoneNumber: dto.phoneNumber,
-              }),
-            },
-          },
-        };
-      case "SURVEILLANT":
-        return {
-          surveillantProfile: {
-            update: {
-              ...(dto.phoneNumber !== undefined && {
-                phoneNumber: dto.phoneNumber,
-              }),
-            },
-          },
-        };
-      case "CORRECTOR":
-        return {
-          correctorProfile: {
-            update: {
-              ...(dto.specialization !== undefined && {
-                specialization: dto.specialization,
-              }),
-              ...(dto.academicGrade !== undefined && {
-                academicGrade: dto.academicGrade,
-              }),
-              ...(dto.institution !== undefined && {
-                institution: dto.institution,
-              }),
-              ...(dto.isAvailable !== undefined && {
-                isAvailable: dto.isAvailable,
-              }),
-            },
-          },
-        };
-      case "JURY_MEMBER":
-        return {
-          juryMemberProfile: {
-            update: {
-              ...(dto.academicRank !== undefined && {
-                academicRank: dto.academicRank,
-              }),
-              ...(dto.institution !== undefined && {
-                institution: dto.institution,
-              }),
-            },
-          },
-        };
-      case "AUDITOR":
-        return {
-          auditorProfile: {
-            update: {
-              ...(dto.scope !== undefined && { scope: dto.scope }),
-            },
-          },
-        };
+      case "COORDINATOR": {
+        const data: Record<string, unknown> = {};
+        if (dto.department  !== undefined) data.department  = dto.department;
+        if (dto.phoneNumber !== undefined) data.phoneNumber = dto.phoneNumber;
+        if (Object.keys(data).length === 0) return {};
+        return { coordinatorProfile: { update: data } };
+      }
+
+      case "SURVEILLANT": {
+        const data: Record<string, unknown> = {};
+        if (dto.phoneNumber !== undefined) data.phoneNumber = dto.phoneNumber;
+        if (Object.keys(data).length === 0) return {};
+        return { surveillantProfile: { update: data } };
+      }
+
+      case "CORRECTOR": {
+        const data: Record<string, unknown> = {};
+        if (dto.specialization !== undefined) data.specialization = dto.specialization;
+        if (dto.academicGrade  !== undefined) data.academicGrade  = dto.academicGrade;
+        if (dto.institution    !== undefined) data.institution    = dto.institution;
+        if (dto.isAvailable    !== undefined) data.isAvailable    = dto.isAvailable;
+        if (Object.keys(data).length === 0) return {};
+        return { correctorProfile: { update: data } };
+      }
+
+      case "JURY_MEMBER": {
+        const data: Record<string, unknown> = {};
+        if (dto.academicRank !== undefined) data.academicRank = dto.academicRank;
+        if (dto.institution  !== undefined) data.institution  = dto.institution;
+        if (Object.keys(data).length === 0) return {};
+        return { juryMemberProfile: { update: data } };
+      }
+
+      case "AUDITOR": {
+        const data: Record<string, unknown> = {};
+        if (dto.scope !== undefined) data.scope = dto.scope;
+        if (Object.keys(data).length === 0) return {};
+        return { auditorProfile: { update: data } };
+      }
+
       default:
         return {};
     }
   };
 
+  // FIX: build base data first, only include name fields if passed
+  const baseData: Record<string, unknown> = {};
+  if (dto.firstName !== undefined) baseData.firstName = dto.firstName;
+  if (dto.lastName  !== undefined) baseData.lastName  = dto.lastName;
+
+  const profileUpdate = buildProfileUpdate();
+
+  // FIX: if nothing at all was passed, throw instead of running empty update
+  if (Object.keys(baseData).length === 0 && Object.keys(profileUpdate).length === 0) {
+    throw new AppError("No fields provided for update", 400);
+  }
+
   return identityDb.user.update({
     where: { id },
-    data: {
-      ...(dto.firstName !== undefined && { firstName: dto.firstName }),
-      ...(dto.lastName !== undefined && { lastName: dto.lastName }),
-      ...buildProfileUpdate(),
-    },
+    data:  { ...baseData, ...profileUpdate },
     select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      role: true,
-      isActive: true,
+      id:                 true,
+      firstName:          true,
+      lastName:           true,
+      email:              true,
+      role:               true,
+      isActive:           true,
       coordinatorProfile: true,
       surveillantProfile: true,
-      correctorProfile: true,
-      juryMemberProfile: true,
-      auditorProfile: true,
+      correctorProfile:   true,
+      juryMemberProfile:  true,
+      auditorProfile:     true,
     },
   });
 };
 
+// ─── DEACTIVATE / REACTIVATE ──────────────────────────────────────────────────
+
 export const deactivateUser = async (id: string) => {
   const user = await identityDb.user.findUnique({ where: { id } });
-  if (!user) throw new AppError("User not found", 404);
-  if (user.role === "ADMIN")
-    throw new AppError("Cannot deactivate admin account", 403);
-  if (!user.isActive) throw new AppError("User is already inactive", 400);
+  if (!user)            throw new AppError("User not found", 404);
+  if (user.role === "ADMIN") throw new AppError("Cannot deactivate admin account", 403);
+  if (!user.isActive)   throw new AppError("User is already inactive", 400);
 
   return identityDb.user.update({
     where: { id },
-    data: { isActive: false },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      isActive: true,
-      role: true,
-    },
+    data:  { isActive: false },
+    select: { id: true, firstName: true, lastName: true, isActive: true, role: true },
   });
 };
 
 export const reactivateUser = async (id: string) => {
   const user = await identityDb.user.findUnique({ where: { id } });
-  if (!user) throw new AppError("User not found", 404);
-  if (user.isActive) throw new AppError("User is already active", 400);
+  if (!user)          throw new AppError("User not found", 404);
+  if (user.isActive)  throw new AppError("User is already active", 400);
 
   return identityDb.user.update({
     where: { id },
-    data: { isActive: true },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      isActive: true,
-      role: true,
-    },
+    data:  { isActive: true },
+    select: { id: true, firstName: true, lastName: true, isActive: true, role: true },
   });
 };
+
+// ─── RESEND EMAIL ─────────────────────────────────────────────────────────────
 
 export const resendWelcomeEmail = async (id: string) => {
   const user = await identityDb.user.findUnique({ where: { id } });
@@ -367,9 +353,10 @@ export const resendWelcomeEmail = async (id: string) => {
   const tempPassword = generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 12);
 
+  // reset password first — always, even if email fails
   await identityDb.user.update({
     where: { id },
-    data: { passwordHash, mustChangePassword: true },
+    data:  { passwordHash, mustChangePassword: true },
   });
 
   const fullName = buildFullName(user.firstName, user.lastName);
@@ -380,8 +367,11 @@ export const resendWelcomeEmail = async (id: string) => {
     user.role,
   );
 
+  // FIX: return emailSent status so controller can include it in response
+  let emailSent = false;
   try {
     await sendEmail({ emailto: user.email, subject, html });
+    emailSent = true;
   } catch (err: unknown) {
     console.error(
       `[Email] Failed to resend welcome email to ${user.email}:`,
@@ -389,5 +379,11 @@ export const resendWelcomeEmail = async (id: string) => {
     );
   }
 
-  return { message: "Welcome email resent successfully", email: user.email };
+  return {
+    message:   emailSent
+      ? "Welcome email resent successfully"
+      : "Password reset but email delivery failed — check SMTP config",
+    email:     user.email,
+    emailSent,
+  };
 };
