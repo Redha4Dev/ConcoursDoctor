@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Pencil, Plus, MoreVertical, Loader2 } from "lucide-react";
 import EditFormationModal from "@/components/dashboard/EditFormationModal";
 import NewSessionModal from "@/components/dashboard/NewSessionModal";
-import { api } from "@/lib/api"; 
+import { api } from "@/lib/api";
 
 type SessionStatus = "draft" | "archive";
 
@@ -16,7 +16,7 @@ interface Session {
   candidates: number;
   examDate: string;
   rooms: number;
-  academicYear : string; 
+  academicYear: string;
 }
 
 interface StaffMember {
@@ -36,8 +36,8 @@ interface ProgramData {
   isActive: boolean;
   createdAt: string;
   createdBy: string;
-  sessions: Session[]; 
-  staff?: StaffMember[]; // Assuming staff might be populated in the future
+  sessions: Session[];
+  staff?: StaffMember[];
   _count: {
     sessions: number;
     staff: number;
@@ -71,29 +71,29 @@ export default function ProgramDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showNewSession, setShowNewSession] = useState(false);
 
-  useEffect(() => {
-    const fetchProgramData = async () => {
-      if (!programId) return;
-      
-      try {
-        setIsLoading(true);
-        // Replace with your actual API endpoint
-        const response = await api.get(`/api/v1/formations/${programId}`);
+  // Extracted fetch function so it can be called again on success
+  const fetchProgramData = useCallback(async () => {
+    if (!programId) return;
 
-        if (response.data && response.data.success) {
-          setProgram(response.data.data);
-        } else {
-          setError(response.data.message || "Failed to load program data");
-        }
-      } catch (err) {
-        setError("An error occurred while fetching the data.");
-      } finally {
-        setIsLoading(false);
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/api/v1/formations/${programId}`);
+
+      if (response.data && response.data.success) {
+        setProgram(response.data.data);
+      } else {
+        setError(response.data.message || "Failed to load program data");
       }
-    };
-
-    fetchProgramData();
+    } catch (err) {
+      setError("An error occurred while fetching the data.");
+    } finally {
+      setIsLoading(false);
+    }
   }, [programId]);
+
+  useEffect(() => {
+    fetchProgramData();
+  }, [fetchProgramData]);
 
   if (isLoading) {
     return (
@@ -106,8 +106,10 @@ export default function ProgramDetailPage() {
   if (error || !program) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F9FA] gap-4">
-        <p className="text-red-500 font-medium">{error || "Program not found"}</p>
-        <button 
+        <p className="text-red-500 font-medium">
+          {error || "Program not found"}
+        </p>
+        <button
           onClick={() => router.push("/dashboard/programs")}
           className="text-[#3014B8] underline"
         >
@@ -138,8 +140,8 @@ export default function ProgramDetailPage() {
           <div className="flex items-center gap-3">
             <span
               className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-                program.isActive 
-                  ? "bg-[#D1FAE5] text-[#047857]" 
+                program.isActive
+                  ? "bg-[#D1FAE5] text-[#047857]"
                   : "bg-red-100 text-red-700"
               }`}
               style={{ fontFamily: "'Inter', sans-serif" }}
@@ -241,7 +243,7 @@ export default function ProgramDetailPage() {
                         {h}
                       </span>
                     </div>
-                  )
+                  ),
                 )}
                 <div className="w-[72px]" />
               </div>
@@ -255,7 +257,7 @@ export default function ProgramDetailPage() {
                     style={{ height: 83 }}
                     onClick={() =>
                       router.push(
-                        `/dashboard/programs/${program.id}/${session.id}`
+                        `/dashboard/programs/${program.id}/${session.id}`,
                       )
                     }
                   >
@@ -520,7 +522,7 @@ export default function ProgramDetailPage() {
         </div>
       </div>
 
-      {/* Activity Log - Consider pulling this from backend later if applicable */}
+      {/* Activity Log */}
       <div
         className="flex flex-col gap-4 p-6 rounded-[12px] mt-6"
         style={{
@@ -538,21 +540,32 @@ export default function ProgramDetailPage() {
         </h4>
         <div className="flex flex-col gap-4">
           <div className="text-sm text-[#64748B]">
-            Program {program.name} was created on {new Date(program.createdAt).toLocaleDateString()}.
+            Program {program.name} was created on{" "}
+            {new Date(program.createdAt).toLocaleDateString()}.
           </div>
         </div>
       </div>
 
       {/* Modals */}
       {showEditModal && (
-        <EditFormationModal 
-          // You can now pass the dynamic program data to the edit modal
-          // programData={program} 
-          onClose={() => setShowEditModal(false)} 
+        <EditFormationModal
+          onClose={() => setShowEditModal(false)}
         />
       )}
-      {showNewSession && (
-        <NewSessionModal onClose={() => setShowNewSession(false)} />
+      
+      {/* This is where the magic happens! We pass formationId, programName, 
+        and provide a callback to refresh the data when the session is successfully added 
+      */}
+      {showNewSession && program && (
+        <NewSessionModal 
+          formationId={program.id}
+          programName={program.name}
+          onClose={() => setShowNewSession(false)} 
+          onSuccess={() => {
+            setShowNewSession(false);
+            fetchProgramData(); // Refreshes your UI instantly
+          }}
+        />
       )}
     </div>
   );

@@ -77,7 +77,7 @@ export default function  Dashbaord () {
     checkAuth();
   }, [router]);
   return (
-    <div className="flex min-h-screen bg-[#F8F9FA] font-sans text-slate-900">
+    <div className="flex font-sans min-h-screen bg-[#F8F9FA]  text-slate-900">
       {/* <Sidebar/> */}
 
       {/* Main Content */}
