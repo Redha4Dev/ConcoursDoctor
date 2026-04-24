@@ -33,26 +33,36 @@ export const importCandidates = async (
   // 4. create import batch record first
   const batch = await identityDb.importBatch.create({
     data: {
-      sessionId, importedBy, source, fileName: file.originalname,
+      sessionId,
+      importedBy,
+      source,
+      fileName: file.originalname,
       totalRecords: valid.length + errors.length,
-      validRecords: valid.length, invalidRecords: errors.length,
+      validRecords: valid.length,
+      invalidRecords: errors.length,
       // FIX: Used safe JSON stringification to prevent runtime errors and removed unsafe `as any` (Issue 4)
-      validationErrors: errors.length > 0 ? JSON.parse(JSON.stringify(errors)) : undefined,
+      validationErrors:
+        errors.length > 0 ? JSON.parse(JSON.stringify(errors)) : undefined,
     },
   });
 
   // 5. insert valid candidates — skip duplicates gracefully
   const candidatesToInsert = valid.map((row) => ({
-    ...row, email: row.email || null, phoneNumber: row.phoneNumber || null,
-    nationalId: row.nationalId || null, sessionId, importBatchId: batch.id, status: "REGISTERED" as const,
+    ...row,
+    email: row.email || null,
+    phoneNumber: row.phoneNumber || null,
+    nationalId: row.nationalId || null,
+    sessionId,
+    importBatchId: batch.id,
+    status: "REGISTERED" as const,
   }));
 
   // FIX: Added clarifying comment regarding `skipDuplicates` limitation (Issue 3)
-  // NOTE: `createMany` with `skipDuplicates: true` conflates skipped-duplicates with 
+  // NOTE: `createMany` with `skipDuplicates: true` conflates skipped-duplicates with
   // insert-failures (e.g., constraint violations). It's a known Prisma limitation.
   const result = await identityDb.candidate.createMany({
     data: candidatesToInsert,
-    skipDuplicates: true, 
+    skipDuplicates: true,
   });
 
   const imported = result.count;
@@ -65,8 +75,14 @@ export const importCandidates = async (
   });
 
   return {
-    batchId: batch.id, fileName: file.originalname, source, imported, skipped, invalid: errors.length,
-    duplicates: duplicates.slice(0, 20), errors: errors.slice(0, 50),
+    batchId: batch.id,
+    fileName: file.originalname,
+    source,
+    imported,
+    skipped,
+    invalid: errors.length,
+    duplicates: duplicates.slice(0, 20),
+    errors: errors.slice(0, 50),
     summary: `${imported} imported, ${skipped} skipped (duplicates), ${errors.length} invalid`,
   };
 };
@@ -107,7 +123,7 @@ export const getCandidates = async (
   const [candidates, total] = await Promise.all([
     identityDb.candidate.findMany({
       where,
-      orderBy: { importedAt: "desc" },
+      orderBy: [{ importedAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -174,11 +190,11 @@ export const deleteCandidate = async (
   }
 
   await identityDb.candidate.delete({ where: { id: candidateId } });
-  
+
   // FIX: Returning `registrationNumber` directly so the controller does not need a pre-fetch (Issue 1 & 2)
-  return { 
-    message: "Candidate removed successfully", 
-    registrationNumber: candidate.registrationNumber 
+  return {
+    message: "Candidate removed successfully",
+    registrationNumber: candidate.registrationNumber,
   };
 };
 
