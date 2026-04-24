@@ -523,8 +523,8 @@ export default function ProgramDetailPage() {
       </div>
 
       {/* Activity Log */}
-      <div
-        className="flex flex-col gap-4 p-6 rounded-[12px] mt-6"
+      {/* <div
+        className="flex flex-col gap-4 p-6 rounded-[12px]"
         style={{
           background: "rgba(255,255,255,0.5)",
           border: "1px solid rgba(48,20,184,0.1)",
@@ -544,7 +544,7 @@ export default function ProgramDetailPage() {
             {new Date(program.createdAt).toLocaleDateString()}.
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Modals */}
       {showEditModal && (

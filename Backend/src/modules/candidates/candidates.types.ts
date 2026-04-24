@@ -25,7 +25,13 @@ export const CandidateRowSchema = z.object({
   address: z.string().optional().or(z.literal("")),
 
   // ── identity ──────────────────────────────────────────────────────────────
-  dateOfBirth: z.string().optional().or(z.literal("")),
+  dateOfBirth: z
+    .union([z.string(), z.date()])
+    .transform((val) =>
+      val instanceof Date ? val.toISOString().split("T")[0] : val,
+    )
+    .optional()
+    .or(z.literal("")),
   birthPlace: z.string().optional().or(z.literal("")),
   nationalId: z.string().optional().or(z.literal("")),
 

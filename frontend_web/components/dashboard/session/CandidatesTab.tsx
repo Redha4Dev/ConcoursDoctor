@@ -2,6 +2,8 @@
 
 import React, { useRef, useState } from "react";
 import { CloudUpload, Filter, Download, Link } from "lucide-react";
+import { useParams } from "next/navigation";
+import { api } from "@/lib/api";
 
 type CandidateStatus = "registered" | "error";
 
@@ -73,13 +75,56 @@ const StatusBadge = ({
 };
 
 export default function CandidatesTab() {
+  const params = useParams();
+  const sessionId = params?.sessionId as string;
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [apiEndpoint, setApiEndpoint] = useState(
-    "https://api.talentcloud.com/v1/candidates"
-  );
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const [apiEndpoint, setApiEndpoint] = useState("");
   const [apiKey, setApiKey] = useState("••••••••••••••••");
+
+  // --- Handle File Upload using @/lib/api ---
+  const uploadFile = async (selectedFile: File) => {
+    if (!sessionId) {
+      console.error("Session ID is missing.");
+      return;
+    }
+
+    setFile(selectedFile);
+    setIsUploading(true);
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    try {
+      const endpoint = `/api/v1/candidates/${sessionId}/import`;
+
+      // Assuming your api utility is an Axios instance or similar wrapper
+      const response = await api.post(
+              endpoint,
+              formData,
+              {
+                headers: {
+                  "Content-Type": "multipart/form-data",
+                },
+              },
+            );
+
+      // Adjust response handling based on your specific api wrapper's return format
+      console.log("Upload successful:", response.data || response);
+      
+      // Optional: Refresh your candidates state here based on the response
+
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      // Optional: Handle error UI state here
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-8 w-full">
@@ -114,7 +159,7 @@ export default function CandidatesTab() {
               e.preventDefault();
               setIsDragging(false);
               const f = e.dataTransfer.files[0];
-              if (f) setFile(f);
+              if (f) uploadFile(f);
             }}
           >
             <div
@@ -144,20 +189,22 @@ export default function CandidatesTab() {
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) setFile(f);
+                if (f) uploadFile(f);
               }}
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-7 py-3 rounded-[4px] text-[14px] font-bold text-white"
+              disabled={isUploading}
+              className={`px-7 py-3 rounded-[4px] text-[14px] font-bold text-white ${
+                isUploading ? "opacity-70 cursor-not-allowed" : ""
+              }`}
               style={{
                 background: "#3014B8",
-                boxShadow:
-                  "0px 10px 15px -3px rgba(48,20,184,0.2), 0px 4px 6px -4px rgba(48,20,184,0.2)",
+                boxShadow: "0px 10px 15px -3px rgba(48,20,184,0.2), 0px 4px 6px -4px rgba(48,20,184,0.2)",
                 fontFamily: "'Google Sans', sans-serif",
               }}
             >
-              {file ? `📄 ${file.name}` : "Browse Files"}
+              {isUploading ? "Uploading..." : file ? `📄 ${file.name}` : "Browse Files"}
             </button>
           </div>
         </div>
@@ -193,8 +240,9 @@ export default function CandidatesTab() {
                 Endpoint URL
               </label>
               <textarea
-                value={apiEndpoint}
+                value={apiEndpoint || `/api/v1/candidates/${sessionId || "{sessionId}"}/import`}
                 onChange={(e) => setApiEndpoint(e.target.value)}
+                readOnly
                 className="w-full px-3 py-2.5 rounded-[4px] text-[14px] text-[#6B7280] resize-none"
                 style={{
                   background: "#F6F6F8",
