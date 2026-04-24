@@ -52,6 +52,19 @@ export const getFormationById = async (id: string) => {
           _count: { select: { candidates: true } },
         },
       },
+      staff: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      },
       _count: {
         select: { sessions: true, staff: true },
       },

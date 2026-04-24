@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Pencil, Plus, MoreVertical, Loader2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, MoreVertical, Loader2, X } from "lucide-react";
 import EditFormationModal from "@/components/dashboard/EditFormationModal";
 import NewSessionModal from "@/components/dashboard/NewSessionModal";
 import { api } from "@/lib/api";
@@ -44,6 +44,14 @@ interface ProgramData {
   };
 }
 
+// Added interface for fetching users from the API
+interface SystemUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 const SessionStatusBadge = ({ status }: { status: SessionStatus }) => {
   if (status === "archive") {
     return (
@@ -71,6 +79,14 @@ export default function ProgramDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showNewSession, setShowNewSession] = useState(false);
 
+  // --- Assign Staff State ---
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<SystemUser[]>([]);
+  const [staffRole, setStaffRole] = useState("CORRECTOR");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [isFetchingUsers, setIsFetchingUsers] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+
   // Extracted fetch function so it can be called again on success
   const fetchProgramData = useCallback(async () => {
     if (!programId) return;
@@ -78,7 +94,7 @@ export default function ProgramDetailPage() {
     try {
       setIsLoading(true);
       const response = await api.get(`/api/v1/formations/${programId}`);
-
+      console.log(response.data);
       if (response.data && response.data.success) {
         setProgram(response.data.data);
       } else {
@@ -94,6 +110,54 @@ export default function ProgramDetailPage() {
   useEffect(() => {
     fetchProgramData();
   }, [fetchProgramData]);
+
+  // --- Fetch Users for Assign Modal ---
+  useEffect(() => {
+    if (!showAssignModal) return;
+
+    const fetchUsers = async () => {
+      try {
+        setIsFetchingUsers(true);
+        setSelectedUserId(""); // Reset selection when role changes
+        const response = await api.get(`/api/v1/users?role=${staffRole}`);
+        
+        // Handle common response structures
+        const data = response.data?.data.users || response.data?.users || response.data || [];
+        setAvailableUsers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+        setAvailableUsers([]);
+      } finally {
+        setIsFetchingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [showAssignModal, staffRole]);
+
+  // --- Handle Assign Submit ---
+  const handleAssignStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserId) return;
+
+    try {
+      setIsAssigning(true);
+      await api.post(`/api/v1/formations/${programId}/staff`, {
+        userId: selectedUserId,
+        role: staffRole,
+      });
+      
+      setShowAssignModal(false);
+      setSelectedUserId("");
+      setStaffRole("CORRECTOR");
+      fetchProgramData(); // Instantly refresh UI
+    } catch (err) {
+      console.error("Failed to assign staff:", err);
+      alert("Action failed. Please check your connection or permissions.");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -121,7 +185,7 @@ export default function ProgramDetailPage() {
 
   return (
     <div
-      className="flex flex-col gap-6 p-8 w-full bg-[#F8F9FA] min-h-screen"
+      className="flex flex-col gap-6 p-8 w-full bg-[#F8F9FA] min-h-screen relative"
       style={{ paddingBottom: 55 }}
     >
       {/* Breadcrumb */}
@@ -319,7 +383,7 @@ export default function ProgramDetailPage() {
             </div>
           </div>
 
-          {/* Stats Teaser Cards (Keeping static placeholders as they were not in the provided JSON) */}
+          {/* Stats Teaser Cards */}
           <div className="relative w-full" style={{ height: 128 }}>
             {/* Success Rate */}
             <div
@@ -484,7 +548,7 @@ export default function ProgramDetailPage() {
                         className="text-[14px] font-bold text-[#0F172A] leading-[18px]"
                         style={{ fontFamily: "'Google Sans', sans-serif" }}
                       >
-                        {member.name}
+                        {member.user.firstName + " " + member.user.lastName}
                       </span>
                       <span
                         className="text-[12px] font-bold text-[#64748B] leading-[15px]"
@@ -506,9 +570,10 @@ export default function ProgramDetailPage() {
             </div>
 
             {/* Divider + Add button */}
-            <div className="pt-6 border-t border-[rgba(200,196,215,0.1)]">
+            <div className="pt-6 border-t border-[rgba(200,196,215,0.1)] mt-auto">
               <button
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-[12px] text-[14px] font-bold text-[#0F172A]"
+                onClick={() => setShowAssignModal(true)}
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-[12px] text-[14px] font-bold text-[#0F172A] hover:bg-gray-200 transition-colors"
                 style={{
                   background: "#F6F6F8",
                   fontFamily: "'Google Sans', sans-serif",
@@ -522,40 +587,11 @@ export default function ProgramDetailPage() {
         </div>
       </div>
 
-      {/* Activity Log */}
-      {/* <div
-        className="flex flex-col gap-4 p-6 rounded-[12px]"
-        style={{
-          background: "rgba(255,255,255,0.5)",
-          border: "1px solid rgba(48,20,184,0.1)",
-          boxShadow: "6px 6px 24px rgba(0,0,0,0.16)",
-          backdropFilter: "blur(7.6px)",
-        }}
-      >
-        <h4
-          className="text-[18px] font-bold text-[#0F172A]"
-          style={{ fontFamily: "'Inter', sans-serif" }}
-        >
-          Recent Activity Log
-        </h4>
-        <div className="flex flex-col gap-4">
-          <div className="text-sm text-[#64748B]">
-            Program {program.name} was created on{" "}
-            {new Date(program.createdAt).toLocaleDateString()}.
-          </div>
-        </div>
-      </div> */}
-
       {/* Modals */}
       {showEditModal && (
-        <EditFormationModal
-          onClose={() => setShowEditModal(false)}
-        />
+        <EditFormationModal onClose={() => setShowEditModal(false)} />
       )}
       
-      {/* This is where the magic happens! We pass formationId, programName, 
-        and provide a callback to refresh the data when the session is successfully added 
-      */}
       {showNewSession && program && (
         <NewSessionModal 
           formationId={program.id}
@@ -566,6 +602,102 @@ export default function ProgramDetailPage() {
             fetchProgramData(); // Refreshes your UI instantly
           }}
         />
+      )}
+
+      {/* Assign Staff Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[32px] w-full max-w-[500px] p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 font-sans relative">
+            <button
+              onClick={() => {
+                setShowAssignModal(false);
+                setSelectedUserId("");
+              }}
+              className="absolute right-6 top-6 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="mb-8">
+              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[2px]">
+                Formation Staff
+              </span>
+              <h2 className="text-2xl font-bold text-slate-900 mt-1">
+                Assign New Member
+              </h2>
+            </div>
+
+            <form onSubmit={handleAssignStaff} className="flex flex-col gap-5">
+              {/* Role Selection */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">
+                  Filter By Role
+                </label>
+                <select
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                  value={staffRole}
+                  onChange={(e) => setStaffRole(e.target.value)}
+                  disabled={isAssigning}
+                >
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="COORDINATOR">COORDINATOR</option>
+                  <option value="SURVEILLANT">SURVEILLANT</option>
+                  <option value="CORRECTOR">CORRECTOR</option>
+                  <option value="JURY_MEMBER">JURY_MEMBER</option>
+                  <option value="AUDITOR">AUDITOR</option>
+                </select>
+              </div>
+
+              {/* User Selection */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">
+                  Select User
+                </label>
+                <select
+                  required
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  disabled={isFetchingUsers || isAssigning}
+                >
+                  <option value="" disabled>
+                    {isFetchingUsers ? "Loading users..." : "Choose a staff member"}
+                  </option>
+                  {availableUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.firstName} {user.lastName} ({user.email})
+                    </option>
+                  ))}
+                </select>
+                {!isFetchingUsers && availableUsers.length === 0 && (
+                  <p className="text-xs text-rose-500 ml-1 mt-1 font-medium">
+                    No users found with this role.
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end items-center gap-4 mt-4 border-t border-slate-100 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  className="text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                  disabled={isAssigning}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAssigning || !selectedUserId}
+                  className="bg-[#3014B8] text-white px-8 py-3 rounded-xl font-bold hover:shadow-lg hover:shadow-indigo-200 disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {isAssigning && <Loader2 size={16} className="animate-spin" />}
+                  Assign Staff
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -54,6 +54,18 @@ export default function CandidatesTab() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+
+  useEffect(() => {
+  const timer = setTimeout(() => {
+    setDebouncedSearch(search);
+    setPage(1); // optional: reset page on new search
+  }, 500); // ⏱ 0.5 seconds
+
+  return () => clearTimeout(timer);
+}, [search]);
+
 
   // --- Fetch Candidates from API ---
   const fetchCandidates = useCallback(async () => {
@@ -63,7 +75,7 @@ export default function CandidatesTab() {
     try {
       const response = await api.get(`/api/v1/candidates/${sessionId}`, {
         params: {
-          search: search || undefined,
+          search: debouncedSearch || undefined,
           status: status || undefined,
           page,
           limit,
@@ -79,7 +91,7 @@ export default function CandidatesTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, search, status, page]);
+  }, [sessionId, debouncedSearch, status, page]);
 
   useEffect(() => {
     fetchCandidates();
@@ -224,7 +236,7 @@ export default function CandidatesTab() {
         {/* Pagination */}
         <div className="flex justify-between items-center px-8 py-6 bg-gray-50/50">
           <span className="text-[12px] text-[#64748B]">
-            Showing {candidates.length} of {totalCount} candidates
+            Showing {Math.min(limit * page, totalCount) } of {totalCount} candidates
           </span>
           <div className="flex gap-1">
             <button 

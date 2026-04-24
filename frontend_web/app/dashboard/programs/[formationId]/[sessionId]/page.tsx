@@ -5,6 +5,9 @@ import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import CandidatesTab from "@/components/dashboard/session/CandidatesTab";
 import StaffTab from "@/components/dashboard/session/StaffTab";
+import SubjectsPage from "@/components/dashboard/session/SubjectTab";
+import RoomDirectory from "@/components/dashboard/session/RoomsTab";
+import ExamSettings from "@/components/dashboard/session/SettingsTab";
 
 // Tab type translations
 type TabType = "Candidates" | "Subjects" | "Staff" | "Rooms" | "Settings";
@@ -78,15 +81,16 @@ export default function SessionPage() {
       <div className="w-full">
         {activeTab === "Candidates" && <CandidatesTab />}
         {activeTab === "Staff" && <StaffTab />}
-        {(activeTab === "Subjects" ||
-          activeTab === "Rooms" ||
-          activeTab === "Settings") && (
+        {activeTab === "Subjects" && <SubjectsPage />} 
+          {activeTab === "Rooms" && <RoomDirectory />} 
+          {activeTab === "Settings" && <ExamSettings />}
+          {/* {(activeTab === "Settings") && (
           <div className="flex items-center justify-center h-64 bg-white rounded-[20px] border border-[rgba(48,20,184,0.1)]">
             <p className="text-[#64748B]" style={{ fontFamily: "'Google Sans', sans-serif" }}>
               {activeTab} Section — coming soon
             </p>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );
