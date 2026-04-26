@@ -1,15 +1,80 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import { api } from "@/lib/api";
 import { 
   ChevronDown, 
   ArrowRight, 
   Settings2, 
   Clock, 
-  RotateCcw 
+  Loader2 
 } from "lucide-react";
 
 export default function ExamSettings() {
+  const params = useParams();
+  const sessionId = params?.sessionId as string;
+
+  // Form State
+  const [threshold, setThreshold] = useState<number | string>("");
+  
+  // Loading States
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // --- API Handlers ---
+
+  const fetchGradingConfig = async () => {
+    if (!sessionId) return;
+    try {
+      setIsLoading(true);
+      const { data } = await api.get(`/api/v1/sessions/${sessionId}/grading-config`);
+      
+      if (data?.data?.discrepancyThreshold !== undefined) {
+        setThreshold(data.data.discrepancyThreshold);
+      }
+    } catch (error) {
+      console.error("Error fetching grading config:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!sessionId || threshold === "") return;
+    
+    try {
+      setIsSaving(true);
+      const payload = {
+        discrepancyThreshold: Number(threshold)
+      };
+
+      const { data } = await api.patch(
+        `/api/v1/sessions/${sessionId}/grading-config`, 
+        payload
+      );
+
+      if (data.success && data.data) {
+        // Update state with the confirmed saved value
+        setThreshold(data.data.discrepancyThreshold);
+      }
+    } catch (error) {
+      console.error("Error saving grading config:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    // Re-fetch to reset to the database's current state
+    fetchGradingConfig();
+  };
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchGradingConfig();
+  }, [sessionId]);
+
   return (
     <div className="flex flex-row gap-6 w-full font-sans items-start">
       
@@ -80,7 +145,15 @@ export default function ExamSettings() {
       </div>
 
       {/* Right Column - Grading Config */}
-      <div className="bg-white rounded-2xl p-10 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 flex-1 h-fit">
+      <div className="bg-white rounded-2xl p-10 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 flex-1 h-fit relative">
+        
+        {/* Loading Overlay for initial fetch */}
+        {isLoading && (
+          <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-[1px] flex items-center justify-center rounded-2xl">
+            <Loader2 className="animate-spin text-[#3014B8]" size={32} />
+          </div>
+        )}
+
         <div className="flex items-start gap-5 mb-10">
           <div className="w-14 h-14 bg-[#EEF2FF] rounded-xl flex items-center justify-center text-[#3014B8]">
             <Settings2 size={28} />
@@ -102,9 +175,11 @@ export default function ExamSettings() {
           </label>
           <div className="relative">
             <input 
-              type="text" 
-              defaultValue="3" 
-              className="w-full bg-[#F1F5F9] border-none rounded-xl py-5 px-6 text-[22px] font-bold text-[#1E293B] outline-none"
+              type="number"
+              min="0"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              className="w-full bg-[#F1F5F9] border-none rounded-xl py-5 px-6 text-[22px] font-bold text-[#1E293B] outline-none focus:ring-2 focus:ring-[#3014B8]/20 transition-all"
             />
             <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[15px] font-bold text-slate-400">
               pts
@@ -124,7 +199,8 @@ export default function ExamSettings() {
             <input 
               type="text" 
               defaultValue="15 Juin 2026" 
-              className="w-full bg-[#F1F5F9] border-none rounded-xl py-5 px-6 text-[18px] font-bold text-[#3014B8] outline-none"
+              disabled
+              className="w-full bg-[#F1F5F9] border-none rounded-xl py-5 px-6 text-[18px] font-bold text-[#3014B8] outline-none opacity-80 cursor-not-allowed"
             />
             <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-[#E0E7FF] text-[#3014B8] px-3 py-1 rounded-lg">
               <Clock size={14} />
@@ -137,12 +213,21 @@ export default function ExamSettings() {
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-8 pt-6">
-          <button className="text-[16px] font-bold text-slate-500 hover:text-slate-700 flex items-center gap-2 transition-colors">
+        <div className="flex items-center justify-end gap-8 pt-6 border-t border-slate-100">
+          <button 
+            onClick={handleReset}
+            disabled={isSaving}
+            className="text-[16px] font-bold text-slate-500 hover:text-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
+          >
             Réinitialiser
           </button>
-          <button className="bg-[#3014B8] hover:bg-[#250f96] transition-colors text-white px-10 py-4 rounded-xl text-[16px] font-bold">
-            Sauvegarder les paramètres
+          <button 
+            onClick={handleSaveSettings}
+            disabled={isSaving || isLoading || threshold === ""}
+            className="bg-[#3014B8] hover:bg-[#250f96] transition-colors text-white px-10 py-4 rounded-xl text-[16px] font-bold flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSaving && <Loader2 size={18} className="animate-spin" />}
+            {isSaving ? "Sauvegarde..." : "Sauvegarder les paramètres"}
           </button>
         </div>
       </div>

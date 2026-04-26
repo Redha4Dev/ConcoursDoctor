@@ -55,6 +55,7 @@ export default function RoomManagement() {
       setIsLoading(true);
       const response = await api.get("/api/v1/rooms");
       const data = response.data;
+      console.log(data);
       let roomsArray = [];
 
       if (Array.isArray(data)) {
