@@ -176,14 +176,8 @@ export default function StaffTab() {
 
       const mappedStaff = staffList.map((user: any) => ({
         id: user.id || user.userId,
-        initials: user.user.name
-          ? user.user.name
-              .split(" ")
-              .map((n: string) => n[0])
-              .join("")
-              .toUpperCase()
-              .substring(0, 2)
-          : "??",
+        initials: user.user.firstName[0].toUpperCase() + user.user.lastName[0].toUpperCase()
+              ,
         name:
           user.user.firstName + " " + user.user.lastName ||
           user.user.name ||

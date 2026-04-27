@@ -47,6 +47,7 @@ export default function RoomDirectory() {
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
 
   // Add Room Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -115,7 +116,7 @@ export default function RoomDirectory() {
     }
   };
 
-  // --- NEW: PATCH HANDLER FOR CAPACITY ---
+  // --- PATCH HANDLER FOR CAPACITY ---
   const handleUpdateCapacity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionId || !editingSessionRoomId || usedCapacityInput === "") return;
@@ -136,6 +137,22 @@ export default function RoomDirectory() {
       console.error("Error updating capacity:", error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // --- NEW: AUTO-ASSIGN HANDLER ---
+  const handleAutoAssign = async () => {
+    if (!sessionId) return;
+    try {
+      setIsAutoAssigning(true);
+      const response = await api.post(`/api/v1/sessions/${sessionId}/rooms/auto-assign`, {});
+      console.log("Auto-assign response:", response.data);
+      await fetchSessionRooms(); // Refresh the list after auto-assigning
+    } catch (error) {
+      console.error("Error auto-assigning rooms:", error);
+      alert("Une erreur est survenue lors de l'assignation automatique.");
+    } finally {
+      setIsAutoAssigning(false);
     }
   };
 
@@ -173,6 +190,16 @@ export default function RoomDirectory() {
         <div className="flex flex-row items-center justify-between p-6">
           <h2 className="text-[22px] font-bold text-[#0F172A]">Répertoire des Salles</h2>
           <div className="flex flex-row items-center gap-4">
+            {/* Auto-assign Button */}
+            <button 
+              onClick={handleAutoAssign}
+              disabled={isAutoAssigning}
+              className="flex items-center gap-2 bg-transparent border-2 border-[#3014B8] text-[#3014B8] hover:bg-[#3014B8]/5 transition-colors px-5 py-2 rounded-full text-[14px] font-bold disabled:opacity-50"
+            >
+              {isAutoAssigning ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+              Auto-assign
+            </button>
+
             <button onClick={openAddModal} className="flex items-center gap-2 bg-[#3014B8] hover:bg-[#250f96] transition-colors text-white px-5 py-2.5 rounded-full text-[14px] font-bold">
               <Plus size={16} />
               Ajouter une salle

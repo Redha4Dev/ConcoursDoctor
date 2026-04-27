@@ -15,12 +15,17 @@ export default function ExamSettings() {
   const params = useParams();
   const sessionId = params?.sessionId as string;
 
-  // Form State
+  // Form States
   const [threshold, setThreshold] = useState<number | string>("");
   
+  // Status States
+  const [currentStatus, setCurrentStatus] = useState<string>("draft");
+  const [selectedStatus, setSelectedStatus] = useState<string>("open");
+
   // Loading States
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // --- API Handlers ---
 
@@ -65,6 +70,25 @@ export default function ExamSettings() {
     }
   };
 
+  const handleUpdateStatus = async () => {
+    if (!sessionId) return;
+
+    try {
+      setIsUpdatingStatus(true);
+      await api.patch(`/api/v1/sessions/${sessionId}/status`, {
+        status: selectedStatus
+      });
+      
+      // Update the badge to reflect the new successfully saved status
+      setCurrentStatus(selectedStatus);
+    } catch (error) {
+      console.error("Error updating session status:", error);
+      alert("Une erreur est survenue lors de la mise à jour du statut.");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const handleReset = () => {
     // Re-fetch to reset to the database's current state
     fetchGradingConfig();
@@ -73,6 +97,8 @@ export default function ExamSettings() {
   // Fetch data on mount
   useEffect(() => {
     fetchGradingConfig();
+    // Note: If you have a GET endpoint for session details, 
+    // you should also fetch the `currentStatus` here.
   }, [sessionId]);
 
   return (
@@ -87,8 +113,12 @@ export default function ExamSettings() {
             <h3 className="text-[12px] font-bold text-[#3014B8] tracking-widest uppercase">
               Statut Actuel
             </h3>
-            <span className="bg-[#FCE8E0] text-[#934834] text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-              Draft
+            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
+              currentStatus === 'draft' ? 'bg-[#FCE8E0] text-[#934834]' : 
+              currentStatus === 'open' ? 'bg-[#E0FCE5] text-[#149334]' : 
+              'bg-[#E2E8F0] text-[#475569]'
+            }`}>
+              {currentStatus}
             </span>
           </div>
 
@@ -100,17 +130,27 @@ export default function ExamSettings() {
           </p>
 
           <div className="relative mb-6">
-            <select className="w-full bg-[#F1F5F9] border-none rounded-xl py-4 px-5 text-[15px] font-bold text-[#1E293B] appearance-none outline-none focus:ring-2 focus:ring-[#3014B8]/20 transition-all">
-              <option>Brouillon (Draft)</option>
-              <option>Publié</option>
-              <option>Clôturé</option>
+            <select 
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              disabled={isUpdatingStatus}
+              className="w-full bg-[#F1F5F9] border-none rounded-xl py-4 px-5 text-[15px] font-bold text-[#1E293B] appearance-none outline-none focus:ring-2 focus:ring-[#3014B8]/20 transition-all disabled:opacity-50"
+            >
+              <option value="draft">Brouillon (Draft)</option>
+              <option value="open">Publié (Open)</option>
+              <option value="closed">Clôturé (Closed)</option>
             </select>
             <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           </div>
 
-          <button className="w-full bg-[#3014B8] hover:bg-[#250f96] transition-colors text-white py-4 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 group">
-            Mettre à jour le statut
-            <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+          <button 
+            onClick={handleUpdateStatus}
+            disabled={isUpdatingStatus || selectedStatus === currentStatus}
+            className="w-full bg-[#3014B8] hover:bg-[#250f96] transition-colors text-white py-4 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isUpdatingStatus && <Loader2 size={18} className="animate-spin" />}
+            {isUpdatingStatus ? "Mise à jour..." : "Mettre à jour le statut"}
+            {!isUpdatingStatus && <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />}
           </button>
         </div>
 
