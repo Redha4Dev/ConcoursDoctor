@@ -29,7 +29,7 @@ import { api } from "@/lib/api";
 import { url } from "inspector";
 
 const navItems = [
-  { title: "Dashboard", icon: LayoutGrid, url: "/dashboard/dashboard" },
+  { title: "Dashboard", icon: LayoutGrid, url: "/dashboard" },
   { title: "Programs", icon: GraduationCap, url: "/dashboard/programs" },
   { title: "Manage Teachers", icon: Users , url: "/dashboard/teachersGestion" }, 
   { title: "Manage Rooms", icon: DoorOpen, url: "/dashboard/roomsGestion" },
