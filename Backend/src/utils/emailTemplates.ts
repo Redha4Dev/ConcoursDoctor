@@ -1,3 +1,5 @@
+const PORT_Front = process.env.PORT_Front || 3000;
+
 export const tempPasswordTemplate = (
   fullName: string,
   email: string,
@@ -72,7 +74,7 @@ export const tempPasswordTemplate = (
           </table>
  
           <!-- CTA -->
-          <a href="https://yourwebsite.com/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;margin-bottom:32px;">Se connecter →</a>
+          <a href="http://localhost:${PORT_Front}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;margin-bottom:32px;">Se connecter →</a>
  
           <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px;">
           <p style="font-size:13px;color:#999;line-height:1.6;margin:0;">
@@ -243,7 +245,7 @@ export const formationAssignmentTemplate = (
           <!-- CTA -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
             <tr><td align="center">
-              <a href="https://yourwebsite.com/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
+            <a href="http://localhost:${PORT_Front}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
                 Accéder à la formation →
               </a>
             </td></tr>
@@ -363,7 +365,7 @@ export const surveillantRoomAssignmentTemplate = (
           <!-- CTA -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
             <tr><td align="center">
-              <a href="https://yourwebsite.com/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
+              <a href="http://localhost:${PORT_Front}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
                 Accéder à mon espace →
               </a>
             </td></tr>
