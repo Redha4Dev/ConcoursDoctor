@@ -31,24 +31,30 @@ import { url } from "inspector";
 const navItems = [
   { title: "Dashboard", icon: LayoutGrid, url: "/dashboard" },
   { title: "Programs", icon: GraduationCap, url: "/dashboard/programs" },
-  { title: "Manage Teachers", icon: Users , url: "/dashboard/teachersGestion" }, 
+  { title: "Manage Teachers", icon: Users, url: "/dashboard/teachersGestion" },
   { title: "Manage Rooms", icon: DoorOpen, url: "/dashboard/roomsGestion" },
-  { title: "Settings", icon: Settings , url: "/dashboard/settings" },
+  { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [username, setUsername] = React.useState("Unknown")
+  const [role, setRole] = React.useState("")
   const router = useRouter();
   const checkAuth = async () => {
-        try {
-          await api.get("/api/v1/auth/me"); // cookie sent automatically
-          setLoading(false);
-        } catch (err) {
-          router.push("/login/admin"); // redirect if not authenticated
-        }
-      };
+    try {
+      const response = await api.get("/api/v1/auth/me");
+      const data = response.data.data
+      console.log("User data :", data)
+      setUsername(data.firstName + " " + data.lastName);
+      setRole(data.role) // cookie sent automatically
+      setLoading(false);
+    } catch (err) {
+      router.push("/login/admin"); // redirect if not authenticated
+    }
+  };
   const handleLogout = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -65,12 +71,15 @@ export function AppSidebar() {
     setLoading(false);
   };
 
-  // Helper function for active styles to avoid repetition
-  const getActiveClasses = (isActive: boolean) => 
-    isActive 
-      ? "!bg-[#EEEBFF] !text-[#3b27b5] shadow-sm font-semibold" 
-      : "text-slate-600 hover:bg-slate-50";
+  React.useEffect(() => {
+    checkAuth();
+  })
 
+  // Helper function for active styles to avoid repetition
+  const getActiveClasses = (isActive: boolean) =>
+    isActive
+      ? "!bg-[#EEEBFF] !text-[#3b27b5] shadow-sm font-semibold"
+      : "text-slate-600 hover:bg-slate-50";
 
   return (
     <Sidebar className="border-r border-slate-100 bg-white">
@@ -130,14 +139,17 @@ export function AppSidebar() {
             </div>
             <div className="flex flex-col">
               <span className="text-[14px] font-bold text-slate-900 leading-tight">
-                Dr. Alodf H.
+                {username}
               </span>
               <span className="text-[11px] text-slate-400 font-medium">
-                Super Admin
+                {role}
               </span>
             </div>
           </div>
-          <button onClick={handleLogout} className="text-slate-300 hover:text-slate-500 transition-colors">
+          <button
+            onClick={handleLogout}
+            className="text-slate-300 hover:text-slate-500 transition-colors"
+          >
             <LogOut size={18} className="rotate-180" />
           </button>
         </div>
