@@ -1,3 +1,5 @@
+const PORT_Front = process.env.PORT_Front || 3000;
+
 export const tempPasswordTemplate = (
   fullName: string,
   email: string,
@@ -23,7 +25,7 @@ export const tempPasswordTemplate = (
  
         <!-- Header -->
         <tr><td style="background:#3014B8;padding:28px 40px;">
-<img src="https://res.cloudinary.com/dsztqioey/image/upload/v1776104664/concour_doctora_logo_lm6aqv.png"
+          <img src="https://res.cloudinary.com/dsztqioey/image/upload/v1776104664/concour_doctora_logo_lm6aqv.png"
                alt="ConcourDoctora"
                width="200"
                height="38"
@@ -72,7 +74,7 @@ export const tempPasswordTemplate = (
           </table>
  
           <!-- CTA -->
-          <a href="https://quenq.com/nsfw/" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;margin-bottom:32px;">Se connecter →</a>
+          <a href="http://localhost:${PORT_Front}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;margin-bottom:32px;">Se connecter →</a>
  
           <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px;">
           <p style="font-size:13px;color:#999;line-height:1.6;margin:0;">
@@ -82,7 +84,7 @@ export const tempPasswordTemplate = (
  
         <!-- Footer -->
         <tr><td style="background:#3014B8;padding:18px 40px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.7);">© 2026 ConcourDoctora · Tous droits réservés</p>
+          <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.7);">© 2024 ConcourDoctora · Tous droits réservés</p>
         </td></tr>
  
       </table>
@@ -243,7 +245,7 @@ export const formationAssignmentTemplate = (
           <!-- CTA -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
             <tr><td align="center">
-              <a href="https://yourwebsite.com/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
+            <a href="http://localhost:${PORT_Front}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
                 Accéder à la formation →
               </a>
             </td></tr>
@@ -363,7 +365,7 @@ export const surveillantRoomAssignmentTemplate = (
           <!-- CTA -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
             <tr><td align="center">
-              <a href="https://quenq.com/nsfw/" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
+              <a href="http://localhost:${PORT_Front}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
                 Accéder à mon espace →
               </a>
             </td></tr>
