@@ -221,3 +221,209 @@ export const openSession = asyncHandler(async (req: Request, res: Response) => {
     .status(200)
     .json({ success: true, message: "Session opened", data: result });
 });
+
+// ─── MISSING SESSION CONTROLLERS ──────────────────────────────────────────────
+
+export const deleteSession = asyncHandler(
+  async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!id) {
+      res.status(400);
+      throw new Error("Session ID is required");
+    }
+
+    const result = await sessionsService.deleteSession(id);
+
+    // ✅ AUDIT
+    audit({
+      userId: req.user!.id,
+      action: "SESSION_DELETED",
+      entity: "SESSION",
+      entityId: id,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+      payload: { sessionId: id },
+    }).catch(() => {});
+
+    res
+      .status(200)
+      .json({ success: true, message: "Session deleted", data: result });
+  },
+);
+
+// ─── MISSING SPECIALIZATION CONTROLLERS ───────────────────────────────────────
+
+export const getSessionSpecializations = asyncHandler(
+  async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!id) {
+      res.status(400);
+      throw new Error("Session ID is required");
+    }
+
+    const result = await sessionsService.getSessionSpecializations(id);
+
+    res.status(200).json({
+      success: true,
+      message: "Specializations retrieved",
+      data: result,
+    });
+  },
+);
+
+export const addSessionSpecialization = asyncHandler(
+  async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (!id) {
+      res.status(400);
+      throw new Error("Session ID is required");
+    }
+
+    const result = await sessionsService.addSessionSpecialization(id, req.body);
+
+    // ✅ AUDIT
+    audit({
+      userId: req.user!.id,
+      action: "SESSION_SPECIALIZATION_ADDED",
+      entity: "SESSION_SPECIALIZATION",
+      entityId: result.id,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+      payload: {
+        formationSpecializationId: req.body.formationSpecializationId,
+      },
+    }).catch(() => {});
+
+    res.status(201).json({
+      success: true,
+      message: "Specialization added to session",
+      data: result,
+    });
+  },
+);
+
+export const updateSessionSpecialization = asyncHandler(
+  async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const specializationId = req.params.specializationId as string;
+
+    if (!id || !specializationId) {
+      res.status(400);
+      throw new Error("Session ID and Specialization ID are required");
+    }
+
+    const result = await sessionsService.updateSessionSpecialization(
+      id,
+      specializationId,
+      req.body,
+    );
+
+    // ✅ AUDIT
+    audit({
+      userId: req.user!.id,
+      action: "SESSION_SPECIALIZATION_UPDATED",
+      entity: "SESSION_SPECIALIZATION",
+      entityId: specializationId,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+      payload: { fieldsChanged: Object.keys(req.body) },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: "Session specialization updated",
+      data: result,
+    });
+  },
+);
+
+export const removeSessionSpecialization = asyncHandler(
+  async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const specializationId = req.params.specializationId as string;
+
+    if (!id || !specializationId) {
+      res.status(400);
+      throw new Error("Session ID and Specialization ID are required");
+    }
+
+    const result = await sessionsService.removeSessionSpecialization(
+      id,
+      specializationId,
+    );
+
+    // ✅ AUDIT
+    audit({
+      userId: req.user!.id,
+      action: "SESSION_SPECIALIZATION_REMOVED",
+      entity: "SESSION_SPECIALIZATION",
+      entityId: specializationId,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+      payload: { specializationId },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: "Session specialization removed",
+      data: result,
+    });
+  },
+);
+
+// ─── MISSING STAFF CONTROLLERS ────────────────────────────────────────────────
+
+export const assignStaff = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  if (!id) {
+    res.status(400);
+    throw new Error("Session ID is required");
+  }
+
+  const result = await sessionsService.assignStaff(id, req.body, req.user!.id);
+
+  // ✅ AUDIT
+  audit({
+    userId: req.user!.id,
+    action: "STAFF_ASSIGNED",
+    entity: "SESSION_STAFF",
+    entityId: result.id,
+    ipAddress: req.ip,
+    userAgent: req.headers["user-agent"] as string,
+    payload: { assignedUserId: req.body.userId, function: req.body.function },
+  }).catch(() => {});
+
+  res.status(201).json({
+    success: true,
+    message: "Staff assigned successfully",
+    data: result,
+  });
+});
+
+export const removeStaff = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const userId = req.params.userId as string;
+  const func = req.params.function as string; // Assuming 'function' is passed as a route param
+
+  if (!id || !userId || !func) {
+    res.status(400);
+    throw new Error("Session ID, User ID, and Function are required");
+  }
+
+  await sessionsService.removeStaff(id, userId, func);
+
+  // ✅ AUDIT
+  audit({
+    userId: req.user!.id,
+    action: "STAFF_REMOVED",
+    entity: "SESSION_STAFF",
+    entityId: userId, // Logging the affected user's ID
+    ipAddress: req.ip,
+    userAgent: req.headers["user-agent"] as string,
+    payload: { removedUserId: userId, function: func },
+  }).catch(() => {});
+
+  res
+    .status(200)
+    .json({ success: true, message: "Staff removed successfully", data: null });
+});
