@@ -1,17 +1,14 @@
+// src/modules/formations/formations.service.ts
 import { identityDb } from "../../config/db.js";
-import type { Role } from "../../generated/identity/client.js";
 import { AppError } from "../../utils/AppError.js";
 import type {
   CreateFormationDto,
   UpdateFormationDto,
-  AssignStaffDto,
+  CreateSpecializationDto,
+  UpdateSpecializationDto,
 } from "./formations.types.js";
 
-import { formationAssignmentTemplate } from "../../utils/emailTemplates.js";
-import { sendEmail } from "../../utils/mailer.js";
-
-
-
+// ─── FORMATIONS ───────────────────────────────────────────────────────────────
 
 export const createFormation = async (
   dto: CreateFormationDto,
@@ -22,17 +19,49 @@ export const createFormation = async (
   });
   if (existing) throw new AppError("Formation code already exists", 409);
 
-  return identityDb.doctoralFormation.create({
-    data: { ...dto, createdBy },
+  const coordinator = await identityDb.user.findUnique({
+    where: { id: dto.coordinatorId },
+  });
+  if (!coordinator) throw new AppError("User not found", 404);
+  if (!coordinator.isActive) throw new AppError("User is inactive", 400);
+
+  // use a transaction — formation creation and role flip are atomic
+  return identityDb.$transaction(async (tx) => {
+    const formation = await tx.doctoralFormation.create({
+      data: {
+        name: dto.name,
+        code: dto.code,
+        department: dto.department,
+        description: dto.description ?? null,
+        coordinatorId: dto.coordinatorId,
+        createdBy,
+      },
+      include: {
+        coordinator: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+      },
+    });
+
+    // flip user role to COORDINATOR if they were NOT_ASSIGNED
+    // don't downgrade if they're already something higher
+    if (coordinator.role === "NOT_ASSIGNED") {
+      await tx.user.update({
+        where: { id: dto.coordinatorId },
+        data: { role: "COORDINATOR" },
+      });
+    }
+
+    return formation;
   });
 };
 
 export const getFormations = async () => {
   return identityDb.doctoralFormation.findMany({
     include: {
-      _count: {
-        select: { sessions: true, staff: true },
-      },
+      coordinator: { select: { id: true, firstName: true, lastName: true } },
+      specializations: { where: { isActive: true } },
+      _count: { select: { sessions: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -42,32 +71,22 @@ export const getFormationById = async (id: string) => {
   const formation = await identityDb.doctoralFormation.findUnique({
     where: { id },
     include: {
+      coordinator: {
+        select: { id: true, firstName: true, lastName: true, email: true },
+      },
+      specializations: true,
       sessions: {
         select: {
           id: true,
           label: true,
           status: true,
-          examDate: true,
           academicYear: true,
+          examDate: true,
           _count: { select: { candidates: true } },
         },
+        orderBy: { createdAt: "desc" },
       },
-      staff: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              role: true,
-            },
-          },
-        },
-      },
-      _count: {
-        select: { sessions: true, staff: true },
-      },
+      _count: { select: { sessions: true } },
     },
   });
   if (!formation) throw new AppError("Formation not found", 404);
@@ -80,116 +99,136 @@ export const updateFormation = async (id: string, dto: UpdateFormationDto) => {
   });
   if (!formation) throw new AppError("Formation not found", 404);
 
+  // if changing coordinator — validate new coordinator
+  if (dto.coordinatorId) {
+    const coordinator = await identityDb.user.findUnique({
+      where: { id: dto.coordinatorId },
+    });
+    if (!coordinator) throw new AppError("Coordinator user not found", 404);
+    if (!coordinator.isActive)
+      throw new AppError("Coordinator is inactive", 400);
+  }
+
   return identityDb.doctoralFormation.update({
     where: { id },
+    data: dto,
+    include: {
+      coordinator: { select: { id: true, firstName: true, lastName: true } },
+      specializations: true,
+    },
+  });
+};
+
+export const deleteFormation = async (id: string) => {
+  const formation = await identityDb.doctoralFormation.findUnique({
+    where: { id },
+    include: { _count: { select: { sessions: true } } },
+  });
+  if (!formation) throw new AppError("Formation not found", 404);
+
+  if (formation._count.sessions > 0) {
+    // has sessions — soft delete only
+    if (!formation.isActive)
+      throw new AppError("Formation is already inactive", 400);
+    const updated = await identityDb.doctoralFormation.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    return { ...updated, permanent: false };
+  }
+
+  // no sessions — hard delete (also deletes specializations via cascade)
+  await identityDb.doctoralFormation.delete({ where: { id } });
+  return { id, name: formation.name, permanent: true };
+};
+
+// ─── SPECIALIZATIONS ──────────────────────────────────────────────────────────
+
+export const addSpecialization = async (
+  formationId: string,
+  dto: CreateSpecializationDto,
+) => {
+  const formation = await identityDb.doctoralFormation.findUnique({
+    where: { id: formationId },
+  });
+  if (!formation) throw new AppError("Formation not found", 404);
+  if (!formation.isActive) throw new AppError("Formation is inactive", 400);
+
+  const existing = await identityDb.formationSpecialization.findUnique({
+    where: { formationId_code: { formationId, code: dto.code } },
+  });
+  if (existing)
+    throw new AppError(
+      "Specialization code already exists in this formation",
+      409,
+    );
+
+  return identityDb.formationSpecialization.create({
+    data: { formationId, name: dto.name, code: dto.code },
+  });
+};
+
+export const getSpecializations = async (formationId: string) => {
+  const formation = await identityDb.doctoralFormation.findUnique({
+    where: { id: formationId },
+  });
+  if (!formation) throw new AppError("Formation not found", 404);
+
+  return identityDb.formationSpecialization.findMany({
+    where: { formationId },
+    orderBy: { name: "asc" },
+  });
+};
+
+export const updateSpecialization = async (
+  formationId: string,
+  specializationId: string,
+  dto: UpdateSpecializationDto,
+) => {
+  const spec = await identityDb.formationSpecialization.findFirst({
+    where: { id: specializationId, formationId },
+  });
+  if (!spec) throw new AppError("Specialization not found", 404);
+
+  return identityDb.formationSpecialization.update({
+    where: { id: specializationId },
     data: dto,
   });
 };
 
-export const getFormationStaff = async (formationId: string) => {
-  const formation = await identityDb.doctoralFormation.findUnique({
-    where: { id: formationId },
-  });
-  if (!formation) throw new AppError("Formation not found", 404);
-
-  return identityDb.formationStaff.findMany({
-    where: { formationId },
-    include: {
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          role: true,
-          isActive: true,
-        },
-      },
-    },
-  });
-};
-
-export const assignStaff = async (
+export const deleteSpecialization = async (
   formationId: string,
-  dto: AssignStaffDto,
-  assignedBy: string,
+  specializationId: string,
 ) => {
-  // 1. Formation must exist and be active
-  const formation = await identityDb.doctoralFormation.findUnique({
-    where: { id: formationId },
+  const spec = await identityDb.formationSpecialization.findFirst({
+    where: { id: specializationId, formationId },
+    include: { _count: { select: { sessionSpecializations: true } } },
   });
-  if (!formation) throw new AppError("Formation not found", 404);
-  if (!formation.isActive)
-    throw new AppError("Cannot assign staff to an inactive formation", 400);
+  if (!spec) throw new AppError("Specialization not found", 404);
 
-  // 2. User must exist and be active
-  const user = await identityDb.user.findUnique({ where: { id: dto.userId } });
-  if (!user) throw new AppError("User not found", 404);
-  if (!user.isActive) throw new AppError("Cannot assign an inactive user", 400);
-
-  // 3. System role must match the formation role being assigned
-  if (user.role !== dto.role) {
-    throw new AppError(
-      `Role mismatch: user is ${user.role} but you are trying to assign them as ${dto.role}`,
-      400,
-    );
+  if (spec._count.sessionSpecializations > 0) {
+    // used in sessions — deactivate only
+    return identityDb.formationSpecialization.update({
+      where: { id: specializationId },
+      data: { isActive: false },
+    });
   }
 
-  // 4. Check for duplicate (same user, same formation, same role)
-  const existing = await identityDb.formationStaff.findUnique({
-    where: {
-      formationId_userId_role: {
-        formationId,
-        userId: dto.userId,
-        role: dto.role,
-      },
-    },
+  await identityDb.formationSpecialization.delete({
+    where: { id: specializationId },
   });
-  if (existing)
-    throw new AppError(
-      "User is already assigned to this formation with this role",
-      409,
-    );
-
-const fullName = user.firstName+ " " +user.lastName;
-
-const { subject, html } = formationAssignmentTemplate(
-  fullName,
-  formation.name,
-  user.role,
-);
-
-  try {
-    await sendEmail({ emailto: user.email, subject, html });
-  } catch (err: unknown) {
-    console.error(
-      `[Email] Failed to resend welcome email to ${user.email}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-
-
-  return identityDb.formationStaff.create({
-    data: { formationId, userId: dto.userId, role: dto.role, assignedBy },
-  });
+  return { id: specializationId, permanent: true };
 };
 
-export const removeStaff = async (
+export const getSpecializationById = async (
   formationId: string,
-  userId: string,
-  role: Role,
+  specializationId: string,
 ) => {
-  // FIX: Require `role` and scope the delete using the unique compound constraint (Issue 1)
-  const record = await identityDb.formationStaff.findUnique({
-    where: {
-      formationId_userId_role: { formationId, userId, role },
-    },
-  })
+  const spec = await identityDb.formationSpecialization.findFirst({
+    where: { id: specializationId, formationId },
+  });
 
-  if (!record) throw new AppError("Staff assignment not found", 404);
+  if (!spec) throw new AppError("Specialization not found", 404);
 
-  await identityDb.formationStaff.delete({ where: { id: record.id } });
-
-  // FIX: Return the record ID so the controller can log the correct entityId in the audit trail (Issue 2)
-  return { id: record.id };
+  return spec;
 };

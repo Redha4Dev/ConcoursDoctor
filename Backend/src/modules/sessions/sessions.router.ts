@@ -1,122 +1,177 @@
+// src/modules/sessions/sessions.router.ts
 import { Router } from "express";
 import { protect } from "../../middleware/authMiddleware.js";
 import { restrictTo } from "../../middleware/rbac.middleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
 import {
   CreateSessionSchema,
-  updateSessionSchema,
-  createSubjectSchema,
-  updateSubjectSchema,
-  setGradingConfigSchema,
+  UpdateSessionSchema,
+  AddSessionSpecializationSchema,
+  UpdateSessionSpecializationSchema,
+  AssignStaffSchema,
+  CreateSubjectSchema,
+  UpdateSubjectSchema,
+  GradingConfigSchema,
 } from "./sessions.types.js";
-import * as sessionsController from "./sessions.controller.js";
+import * as sessionsCtrl from "./sessions.controller.js";
+
+// room controller + schemas live in the rooms module
+import * as roomsCtrl from "../rooms/rooms.controller.js";
 import {
   addRoomToSessionSchema,
   updateSessionRoomSchema,
   assignSurveillantSchema,
 } from "../rooms/rooms.types.js";
-import * as roomsController from "../rooms/rooms.controller.js";
 
 const router = Router();
 
 router.use(protect);
 
+// ─── SESSIONS ─────────────────────────────────────────────────────────────────
 router.post(
   "/",
   restrictTo("ADMIN", "COORDINATOR"),
   validate(CreateSessionSchema),
-  sessionsController.createSession,
+  sessionsCtrl.createSession,
 );
-
-router.get("/", sessionsController.getSessions);
-router.get("/:id", sessionsController.getSessionById);
-
+router.get("/", sessionsCtrl.getSessions);
+router.get("/:id", sessionsCtrl.getSessionById);
 router.patch(
   "/:id",
   restrictTo("ADMIN", "COORDINATOR"),
-  validate(updateSessionSchema),
-  sessionsController.updateSession,
+  validate(UpdateSessionSchema),
+  sessionsCtrl.updateSession,
+);
+router.delete(
+  "/:id",
+  restrictTo("ADMIN", "COORDINATOR"),
+  sessionsCtrl.deleteSession,
 );
 
-router.get("/:id/staff", sessionsController.getSessionStaff);
+// ─── SESSION SPECIALIZATIONS ──────────────────────────────────────────────────
+// Coordinator picks which formation specializations are active for this session
+// and sets available slots per specialization
 
-router.get("/:id/subjects", sessionsController.getSubjects);
+router.get("/:id/specializations", sessionsCtrl.getSessionSpecializations);
+
+router.post(
+  "/:id/specializations",
+  restrictTo("ADMIN", "COORDINATOR"),
+  validate(AddSessionSpecializationSchema),
+  sessionsCtrl.addSessionSpecialization,
+);
+
+router.patch(
+  "/:id/specializations/:specId",
+  restrictTo("ADMIN", "COORDINATOR"),
+  validate(UpdateSessionSpecializationSchema),
+  sessionsCtrl.updateSessionSpecialization,
+);
+
+router.delete(
+  "/:id/specializations/:specId",
+  restrictTo("ADMIN", "COORDINATOR"),
+  sessionsCtrl.removeSessionSpecialization,
+);
+
+// ─── SESSION STAFF ────────────────────────────────────────────────────────────
+// Assign users to session with a function (CORRECTOR, JURY_MEMBER, SURVEILLANT...)
+// Flips user.role from NOT_ASSIGNED to assigned role
+
+router.get("/:id/staff", sessionsCtrl.getSessionStaff);
+
+router.post(
+  "/:id/staff",
+  restrictTo("ADMIN", "COORDINATOR"),
+  validate(AssignStaffSchema),
+  sessionsCtrl.assignStaff,
+);
+
+router.delete(
+  "/:id/staff/:userId/:function",
+  restrictTo("ADMIN", "COORDINATOR"),
+  sessionsCtrl.removeStaff,
+);
+
+// ─── SUBJECTS ─────────────────────────────────────────────────────────────────
+router.get("/:id/subjects", sessionsCtrl.getSubjects);
 router.post(
   "/:id/subjects",
   restrictTo("ADMIN", "COORDINATOR"),
-  validate(createSubjectSchema),
-  sessionsController.addSubject,
+  validate(CreateSubjectSchema),
+  sessionsCtrl.addSubject,
 );
 router.patch(
   "/:id/subjects/:subjectId",
   restrictTo("ADMIN", "COORDINATOR"),
-  validate(updateSubjectSchema),
-  sessionsController.updateSubject,
+  validate(UpdateSubjectSchema),
+  sessionsCtrl.updateSubject,
 );
 router.delete(
   "/:id/subjects/:subjectId",
   restrictTo("ADMIN", "COORDINATOR"),
-  sessionsController.deleteSubject,
+  sessionsCtrl.deleteSubject,
 );
 
-router.get("/:id/grading-config", sessionsController.getGradingConfig);
+// ─── GRADING CONFIG ───────────────────────────────────────────────────────────
+router.get("/:id/grading-config", sessionsCtrl.getGradingConfig);
 router.patch(
   "/:id/grading-config",
   restrictTo("ADMIN", "COORDINATOR"),
-  validate(setGradingConfigSchema),
-  sessionsController.setGradingConfig,
+  validate(GradingConfigSchema),
+  sessionsCtrl.setGradingConfig,
 );
 
-router.patch(
-  "/:id/status",
-  restrictTo("ADMIN", "COORDINATOR"),
-  sessionsController.openSession,
-);
+// ─── SESSION ROOMS ────────────────────────────────────────────────────────────
+// IMPORTANT: "auto-assign" must be declared BEFORE "/:sessionRoomId" routes
+// otherwise Express matches "auto-assign" as a sessionRoomId param value
+
+router.get("/:id/rooms", roomsCtrl.getSessionRooms);
 
 router.post(
   "/:id/rooms",
   restrictTo("ADMIN", "COORDINATOR"),
   validate(addRoomToSessionSchema),
-  roomsController.addRoomToSession,
+  roomsCtrl.addRoomToSession,
 );
 
-router.get("/:id/rooms", roomsController.getSessionRooms);
+// auto-assign BEFORE /:sessionRoomId
+router.post(
+  "/:id/rooms/auto-assign",
+  restrictTo("ADMIN", "COORDINATOR"),
+  roomsCtrl.autoAssign,
+);
 
 router.patch(
   "/:id/rooms/:sessionRoomId",
   restrictTo("ADMIN", "COORDINATOR"),
   validate(updateSessionRoomSchema),
-  roomsController.updateSessionRoom,
+  roomsCtrl.updateSessionRoom,
 );
 
 router.delete(
   "/:id/rooms/:sessionRoomId",
   restrictTo("ADMIN", "COORDINATOR"),
-  roomsController.removeRoomFromSession,
-);
-router.post(
-  "/:id/rooms/auto-assign",
-  restrictTo("ADMIN", "COORDINATOR"),
-  roomsController.autoAssign,
+  roomsCtrl.removeRoomFromSession,
 );
 
 router.post(
   "/:id/rooms/:sessionRoomId/surveillants",
   restrictTo("ADMIN", "COORDINATOR"),
   validate(assignSurveillantSchema),
-  roomsController.assignSurveillant,
+  roomsCtrl.assignSurveillant,
 );
 
 router.delete(
   "/:id/rooms/:sessionRoomId/surveillants/:userId",
   restrictTo("ADMIN", "COORDINATOR"),
-  roomsController.removeSurveillant,
+  roomsCtrl.removeSurveillant,
 );
 
 router.post(
   "/:id/rooms/:sessionRoomId/lock",
   restrictTo("ADMIN", "COORDINATOR"),
-  roomsController.lockRoom,
+  roomsCtrl.lockRoom,
 );
 
 export default router;

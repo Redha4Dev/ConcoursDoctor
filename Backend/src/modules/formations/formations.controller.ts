@@ -1,17 +1,19 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "../../utils/catchAsync.js";
 import { AppError } from "../../utils/AppError.js";
-import * as formationsService from "./formations.service.js";
 import { audit } from "../../utils/auditLogger.js";
+
+import * as formationService from "./formations.service.js";
+
+// ─── FORMATIONS ───────────────────────────────────────────────────────────────
 
 export const createFormation = asyncHandler(
   async (req: Request, res: Response) => {
-    const formation = await formationsService.createFormation(
+    const formation = await formationService.createFormation(
       req.body,
       req.user!.id,
     );
 
-    // ✅ AUDIT
     audit({
       userId: req.user!.id,
       action: "FORMATION_CREATED",
@@ -32,7 +34,7 @@ export const createFormation = asyncHandler(
 
 export const getFormations = asyncHandler(
   async (_req: Request, res: Response) => {
-    const formations = await formationsService.getFormations();
+    const formations = await formationService.getFormations();
     res.status(200).json({ success: true, data: formations });
   },
 );
@@ -40,30 +42,20 @@ export const getFormations = asyncHandler(
 export const getFormationById = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
-  if (!id) {
-    throw new AppError("Formation ID is required", 400);
-  }
-    const formation = await formationsService.getFormationById(id);
+    if (!id) throw new AppError("Formation ID is required", 400);
+
+    const formation = await formationService.getFormationById(id);
     res.status(200).json({ success: true, data: formation });
   },
 );
 
-
-
-
-
 export const updateFormation = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    if (!id) {
-      throw new AppError("Formation ID is required", 400);
-    }
-    const result = await formationsService.updateFormation(
-      id,
-      req.body,
-    );
+    if (!id) throw new AppError("Formation ID is required", 400);
 
-    // ✅ AUDIT
+    const result = await formationService.updateFormation(id, req.body);
+
     audit({
       userId: req.user!.id,
       action: "FORMATION_UPDATED",
@@ -74,75 +66,164 @@ export const updateFormation = asyncHandler(
       payload: { fieldsChanged: Object.keys(req.body) },
     }).catch(() => {});
 
-    res
-      .status(200)
-      .json({ success: true, message: "Formation updated", data: result });
+    res.status(200).json({
+      success: true,
+      message: "Formation updated",
+      data: result,
+    });
   },
 );
 
-export const getFormationStaff = asyncHandler(
+export const deleteFormation = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    if (!id) {
-      throw new AppError("Formation ID is required", 400);
-    }
-    const result = await formationsService.getFormationStaff(id);
-    res
-      .status(200)
-      .json({ success: true, message: "Staff retrieved", data: result });
+    if (!id) throw new AppError("Formation ID is required", 400);
+
+    const result = await formationService.deleteFormation(id);
+
+    audit({
+      userId: req.user!.id,
+      action: result.permanent ? "FORMATION_DELETED" : "FORMATION_DEACTIVATED",
+      entity: "FORMATION",
+      entityId: id,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: result.permanent
+        ? "Formation permanently deleted"
+        : "Formation deactivated",
+      data: result,
+    });
   },
 );
 
-export const assignStaff = asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id as string;
-  if (!id) {
-    throw new AppError("Formation ID is required", 400);
-  }
-  const result = await formationsService.assignStaff(
-    id,
-    req.body,
-    req.user!.id,
-  );
+// ─── SPECIALIZATIONS ──────────────────────────────────────────────────────────
 
-  // ✅ AUDIT
-  audit({
-    userId: req.user!.id,
-    action: "FORMATION_STAFF_ASSIGNED",
-    entity: "FORMATION_STAFF",
-    entityId: result.id,
-    ipAddress: req.ip,
-    userAgent: req.headers["user-agent"] as string,
-    payload: { userId: result.userId, role: result.role },
-  }).catch(() => {});
+export const addSpecialization = asyncHandler(
+  async (req: Request, res: Response) => {
+    const formationId = req.params.id as string;
+    if (!formationId) throw new AppError("Formation ID is required", 400);
 
-  res
-    .status(201)
-    .json({ success: true, message: "Staff assigned", data: result });
-});
+    const result = await formationService.addSpecialization(
+      formationId,
+      req.body,
+    );
 
-export const removeStaff = asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id as string;
-  if (!id) throw new AppError("Formation ID is required", 400);
-  
-  const userId = req.params.userId as string;
-  if (!userId) throw new AppError("User ID is required", 400);
+    audit({
+      userId: req.user!.id,
+      action: "SPECIALIZATION_CREATED",
+      entity: "SPECIALIZATION",
+      entityId: result.id,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+      payload: { name: result.name, code: result.code },
+    }).catch(() => {});
 
-  // FIX: Controller now extracts role from body to pass to the service
-  const role = req.body.role;
-  if (!role) throw new AppError("Role is required", 400);
+    res.status(201).json({
+      success: true,
+      message: "Specialization added",
+      data: result,
+    });
+  },
+);
 
-  // FIX: Receiving the deleted record's ID
-  const deletedRecord = await formationsService.removeStaff(id, userId, role);
+export const getSpecializations = asyncHandler(
+  async (req: Request, res: Response) => {
+    const formationId = req.params.id as string;
+    if (!formationId) throw new AppError("Formation ID is required", 400);
 
-  audit({
-    userId: req.user!.id,
-    action: "FORMATION_STAFF_REMOVED",
-    entity: "FORMATION_STAFF",
-    entityId: deletedRecord.id, // FIX: Auditing the specific staff assignment record, not the formation ID (Issue 2)
-    ipAddress: req.ip,
-    userAgent: req.headers["user-agent"] as string,
-    payload: { userId, role },
-  }).catch(() => {});
+    const result = await formationService.getSpecializations(formationId);
 
-  res.status(200).json({ success: true, message: "Staff removed", data: null });
-});
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  },
+);
+
+export const updateSpecialization = asyncHandler(
+  async (req: Request, res: Response) => {
+    const formationId = req.params.id as string;
+    const specializationId = req.params.specId as string;
+
+    if (!formationId || !specializationId) {
+      throw new AppError("Formation ID and Specialization ID required", 400);
+    }
+
+    const result = await formationService.updateSpecialization(
+      formationId,
+      specializationId,
+      req.body,
+    );
+
+    audit({
+      userId: req.user!.id,
+      action: "SPECIALIZATION_UPDATED",
+      entity: "SPECIALIZATION",
+      entityId: specializationId,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: "Specialization updated",
+      data: result,
+    });
+  },
+);
+
+export const deleteSpecialization = asyncHandler(
+  async (req: Request, res: Response) => {
+    const formationId = req.params.id as string;
+    const specializationId = req.params.specId as string;
+
+    if (!formationId || !specializationId) {
+      throw new AppError("Formation ID and Specialization ID required", 400);
+    }
+
+    const result = await formationService.deleteSpecialization(
+      formationId,
+      specializationId,
+    );
+
+    audit({
+      userId: req.user!.id,
+      action: "SPECIALIZATION_DELETED",
+      entity: "SPECIALIZATION",
+      entityId: specializationId,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] as string,
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: "Specialization deleted",
+      data: result,
+    });
+  },
+);
+
+export const getSpecializationById = asyncHandler(
+  async (req: Request, res: Response) => {
+    const formationId = req.params.id as string;
+    const specializationId = req.params.specId as string;
+
+    if (!formationId || !specializationId) {
+      throw new AppError("Formation ID and Specialization ID required", 400);
+    }
+
+    const result = await formationService.getSpecializationById(
+      formationId,
+      specializationId,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  },
+);

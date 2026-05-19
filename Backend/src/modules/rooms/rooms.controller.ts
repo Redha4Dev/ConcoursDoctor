@@ -1,3 +1,4 @@
+// src/modules/rooms/rooms.controller.ts
 import type { Request, Response } from "express";
 import { asyncHandler } from "../../utils/catchAsync.js";
 import { audit } from "../../utils/auditLogger.js";
@@ -15,11 +16,7 @@ export const createRoom = asyncHandler(async (req: Request, res: Response) => {
     entityId: result.id,
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"] as string,
-    payload: {
-      name: result.name,
-      capacity: result.capacity,
-      building: result.building,
-    },
+    payload: { name: result.name, capacity: result.capacity },
   }).catch(() => {});
 
   res
@@ -30,9 +27,7 @@ export const createRoom = asyncHandler(async (req: Request, res: Response) => {
 export const listRooms = asyncHandler(async (req: Request, res: Response) => {
   const showInactive = req.query.showInactive === "true";
   const result = await roomsService.listRooms(showInactive);
-  res
-    .status(200)
-    .json({ success: true, message: "Rooms retrieved", data: result });
+  res.status(200).json({ success: true, data: result });
 });
 
 export const updateRoom = asyncHandler(async (req: Request, res: Response) => {
@@ -54,26 +49,26 @@ export const updateRoom = asyncHandler(async (req: Request, res: Response) => {
     .json({ success: true, message: "Room updated", data: result });
 });
 
-export const deactivateRoom = asyncHandler(
-  async (req: Request, res: Response) => {
-    const id = req.params.id as string;
-    const result = await roomsService.deactivateRoom(id);
+export const deleteRoom = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const result = await roomsService.deleteRoom(id);
 
-    audit({
-      userId: req.user!.id,
-      action: "ROOM_DEACTIVATED",
-      entity: "ROOM",
-      entityId: id,
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] as string,
-      payload: { roomId: id },
-    }).catch(() => {});
+  audit({
+    userId: req.user!.id,
+    action: result.permanent ? "ROOM_DELETED" : "ROOM_DEACTIVATED",
+    entity: "ROOM",
+    entityId: id,
+    ipAddress: req.ip,
+    userAgent: req.headers["user-agent"] as string,
+    payload: { permanent: result.permanent },
+  }).catch(() => {});
 
-    res
-      .status(200)
-      .json({ success: true, message: "Room deactivated", data: result });
-  },
-);
+  res.status(200).json({
+    success: true,
+    message: result.permanent ? "Room permanently deleted" : "Room deactivated",
+    data: result,
+  });
+});
 
 // ─── SESSION ROOMS ────────────────────────────────────────────────────────────
 
@@ -89,7 +84,11 @@ export const addRoomToSession = asyncHandler(
       entityId: result.id,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
-      payload: { sessionId: id, roomId: req.body.roomId },
+      payload: {
+        sessionId: req.params.id,
+        roomId: req.body.roomId,
+        specializationId: req.body.specializationId,
+      },
     }).catch(() => {});
 
     res
@@ -102,11 +101,7 @@ export const getSessionRooms = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const result = await roomsService.getSessionRooms(id);
-    res.status(200).json({
-      success: true,
-      message: "Session rooms retrieved",
-      data: result,
-    });
+    res.status(200).json({ success: true, data: result });
   },
 );
 
@@ -127,7 +122,7 @@ export const updateSessionRoom = asyncHandler(
       entityId: sessionRoomId,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
-      payload: { sessionId: req.params.id, ...req.body },
+      payload: { sessionId: id, ...req.body },
     }).catch(() => {});
 
     res
@@ -150,7 +145,7 @@ export const removeRoomFromSession = asyncHandler(
       entityId: sessionRoomId,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
-      payload: { sessionId: req.params.id },
+      payload: { sessionId: id },
     }).catch(() => {});
 
     res.status(200).json({
@@ -168,27 +163,28 @@ export const autoAssign = asyncHandler(async (req: Request, res: Response) => {
   audit({
     userId: req.user!.id,
     action: "CANDIDATES_AUTO_ASSIGNED",
-    entity: "SESSION_ROOM",
+    entity: "SESSION",
     entityId: id,
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"] as string,
     payload: {
-      sessionId: id,
-      assigned: result.assigned,
-      rooms: result.rooms,
+      totalAssigned: result.totalAssigned,
+      unassigned: result.unassigned,
+      rooms: result.rooms.length,
     },
   }).catch(() => {});
 
-  res
-    .status(200)
-    .json({ success: true, message: "Candidates auto-assigned", data: result });
+  res.status(200).json({
+    success: true,
+    message: `${result.totalAssigned} candidates assigned across ${result.rooms.length} room(s)`,
+    data: result,
+  });
 });
 
 export const assignSurveillant = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const sessionRoomId = req.params.sessionRoomId as string;
-
     const result = await roomsService.assignSurveillant(
       id,
       sessionRoomId,
@@ -203,15 +199,17 @@ export const assignSurveillant = asyncHandler(
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
       payload: {
-        sessionId: req.params.id,
-        sessionRoomId: req.params.sessionRoomId,
+        sessionId: id,
+        sessionRoomId: sessionRoomId,
         userId: req.body.userId,
       },
     }).catch(() => {});
 
-    res
-      .status(201)
-      .json({ success: true, message: "Surveillant assigned", data: result });
+    res.status(201).json({
+      success: true,
+      message: result.warning ?? "Surveillant assigned",
+      data: result,
+    });
   },
 );
 
@@ -231,9 +229,9 @@ export const removeSurveillant = asyncHandler(
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
       payload: {
-        sessionId: req.params.id,
-        sessionRoomId: req.params.sessionRoomId,
-        userId: req.params.userId,
+        sessionId: id,
+        sessionRoomId: sessionRoomId,
+        userId: userId,
       },
     }).catch(() => {});
 
@@ -255,11 +253,7 @@ export const lockRoom = asyncHandler(async (req: Request, res: Response) => {
     entityId: sessionRoomId,
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"] as string,
-    payload: {
-      sessionId: req.params.id,
-      sessionRoomId: req.params.sessionRoomId,
-      lockedAt: new Date().toISOString(),
-    },
+    payload: { sessionId: id, lockedAt: new Date().toISOString() },
   }).catch(() => {});
 
   res.status(200).json({ success: true, message: "Room locked", data: result });

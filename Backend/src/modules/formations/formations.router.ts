@@ -1,52 +1,55 @@
+// src/modules/formations/formations.router.ts
 import { Router } from "express";
 import { protect } from "../../middleware/authMiddleware.js";
 import { restrictTo } from "../../middleware/rbac.middleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
-import { Role } from "../../generated/identity/client.js";
-
 import {
   CreateFormationSchema,
-  updateFormationSchema,
-  assignStaffSchema,
+  UpdateFormationSchema,
+  CreateSpecializationSchema,
+  UpdateSpecializationSchema,
 } from "./formations.types.js";
-import * as formationsController from "./formations.controller.js";
+import * as ctrl from "./formations.controller.js";
 
 const router = Router();
-
 router.use(protect);
 
+// ── formations ────────────────────────────────────────────────────────────────
 router.post(
   "/",
-  restrictTo(Role.ADMIN),
+  restrictTo("ADMIN"),
   validate(CreateFormationSchema),
-  formationsController.createFormation,
+  ctrl.createFormation,
 );
-
-router.get("/", formationsController.getFormations);
-
-router.get("/:id", formationsController.getFormationById);
-
-
-
-
+router.get("/", ctrl.getFormations);
+router.get("/:id", ctrl.getFormationById);
 router.patch(
   "/:id",
   restrictTo("ADMIN"),
-  validate(updateFormationSchema),
-  formationsController.updateFormation,
+  validate(UpdateFormationSchema),
+  ctrl.updateFormation,
 );
-router.get("/:id/staff", formationsController.getFormationStaff);
+router.delete("/:id", restrictTo("ADMIN"), ctrl.deleteFormation);
+
+// ── specializations ───────────────────────────────────────────────────────────
+router.get("/:id/specializations", ctrl.getSpecializations);
+router.get("/:id/specializations/:specId", ctrl.getSpecializationById);
 router.post(
-  "/:id/staff",
+  "/:id/specializations",
   restrictTo("ADMIN"),
-  validate(assignStaffSchema),
-  formationsController.assignStaff,
+  validate(CreateSpecializationSchema),
+  ctrl.addSpecialization,
+);
+router.patch(
+  "/:id/specializations/:specId",
+  restrictTo("ADMIN"),
+  validate(UpdateSpecializationSchema),
+  ctrl.updateSpecialization,
 );
 router.delete(
-  "/:id/staff/:userId",
+  "/:id/specializations/:specId",
   restrictTo("ADMIN"),
-  formationsController.removeStaff,
+  ctrl.deleteSpecialization,
 );
-
 
 export default router;

@@ -1,3 +1,4 @@
+// src/modules/auth/auth.types.ts
 import { z } from "zod";
 
 export const LoginSchema = z.object({
@@ -6,12 +7,12 @@ export const LoginSchema = z.object({
 });
 
 export const ChangePasswordSchema = z.object({
-  oldPassword: z.string().min(1, "Old password is required"),
+  oldPassword: z.string().min(1, "Current password is required"),
   newPassword: z
     .string()
     .min(8, "Minimum 8 characters")
-    .regex(/[A-Z]/, "Must contain one uppercase letter")
-    .regex(/[0-9]/, "Must contain one number"),
+    .regex(/[A-Z]/, "Must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Must contain at least one number"),
 });
 
 export const ForgotPasswordSchema = z.object({
@@ -23,12 +24,11 @@ export const ResetPasswordSchema = z.object({
   newPassword: z
     .string()
     .min(8, "Minimum 8 characters")
-    .regex(/[A-Z]/, "Must contain one uppercase letter")
-    .regex(/[0-9]/, "Must contain one number"),
+    .regex(/[A-Z]/, "Must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Must contain at least one number"),
 });
 
+export type LoginDto = z.infer<typeof LoginSchema>;
+export type ChangePasswordDto = z.infer<typeof ChangePasswordSchema>;
 export type ForgotPasswordDto = z.infer<typeof ForgotPasswordSchema>;
 export type ResetPasswordDto = z.infer<typeof ResetPasswordSchema>;
-
-export type LoginDTO = z.infer<typeof LoginSchema>;
-export type ChangePasswordDTO = z.infer<typeof ChangePasswordSchema>;
