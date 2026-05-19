@@ -8,15 +8,25 @@ info:
 
     ## Authentication
     All protected routes require a valid JWT token stored in an httpOnly cookie (`jwt`).
+    The JWT is also returned in the login response body for clients that cannot read cookies.
     Login via `POST /api/v1/auth/login` to obtain the cookie.
 
     ## Roles
+    - **NOT_ASSIGNED** — Default role after account creation. Becomes a real role after first session staff assignment.
     - **ADMIN** — Full access. Creates all user accounts.
     - **COORDINATOR** — Manages sessions, assigns correctors, configures grading.
     - **CORRECTOR** — Accesses and grades assigned anonymous copies.
     - **JURY_MEMBER** — Reviews deliberation results, signs PV.
     - **SURVEILLANT** — Records attendance during exam sessions.
     - **AUDITOR** — Read-only access to audit logs and archived data.
+
+    ## Change Log
+    - **2026-05-01** — Full sync pass against implementation.
+      - Users: Refactored to flat model (removed profile sub-tables). CreateUserBody no longer accepts `role`.
+      - Auth: Login response now includes `token` in body. Password policies tightened (uppercase + number required).
+      - Formations: Added `coordinatorId` to CreateFormationBody. Added DELETE and full Specializations CRUD. Removed staff routes (moved to Sessions).
+      - Sessions: Removed `availableSlots` from CreateSessionBody (moved to SessionSpecialization). Added DELETE, Specializations CRUD, updated Staff assignment (function field). Fixed openSession 403 status.
+      - Rooms: `AddRoomToSessionBody` now requires `specializationId`. `UpdateSessionRoomBody.usedCapacity` is now optional.
   version: 1.0.0
   contact:
     name: ESI-SBA — ConcoursDoctor Team
@@ -99,8 +109,10 @@ components:
 
     # ── Enums ─────────────────────────────────────────────────────────────────
     Role:
+      # MODIFIED 2026-05-01: Added NOT_ASSIGNED — default role after user creation,
+      # before first session staff assignment flips it to a functional role.
       type: string
-      enum: [ADMIN, COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+      enum: [NOT_ASSIGNED, ADMIN, COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
 
     SessionStatus:
       type: string
@@ -125,6 +137,9 @@ components:
       enum: [CSV, EXCEL, API, MANUAL]
 
     # ── User ──────────────────────────────────────────────────────────────────
+    # MODIFIED 2026-05-01: User model refactored from role-specific sub-tables
+    # to a flat model. Profile fields (phoneNumber, institution, etc.) are now
+    # direct columns on the User record. sessionStaff replaces formationStaff.
     UserSummary:
       type: object
       properties:
@@ -152,7 +167,47 @@ components:
         createdAt:
           type: string
           format: date-time
+        institution:
+          type: string
+          nullable: true
+          example: USTHB
+        academicGrade:
+          type: string
+          nullable: true
+          example: Professeur
+        specialization:
+          type: string
+          nullable: true
+          example: Intelligence Artificielle
+        sessionStaff:
+          type: array
+          description: Sessions this user is assigned to as staff
+          items:
+            type: object
+            properties:
+              function:
+                type: string
+                enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+              session:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  label:
+                    type: string
+                  academicYear:
+                    type: string
+                  formation:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      code:
+                        type: string
 
+    # MODIFIED 2026-05-01: Flat model; removed all profile sub-schemas.
+    # Added mustChangePassword, updatedAt, phoneNumber, sessionStaff with session status.
     UserDetail:
       allOf:
         - $ref: "#/components/schemas/UserSummary"
@@ -163,120 +218,56 @@ components:
             updatedAt:
               type: string
               format: date-time
-            coordinatorProfile:
-              $ref: "#/components/schemas/CoordinatorProfile"
-            surveillantProfile:
-              $ref: "#/components/schemas/SurveillantProfile"
-            correctorProfile:
-              $ref: "#/components/schemas/CorrectorProfile"
-            juryMemberProfile:
-              $ref: "#/components/schemas/JuryMemberProfile"
-            auditorProfile:
-              $ref: "#/components/schemas/AuditorProfile"
-            formationStaff:
+            phoneNumber:
+              type: string
+              nullable: true
+              example: "0555123456"
+            sessionStaff:
               type: array
+              description: Full session staff records including session status
               items:
                 type: object
                 properties:
                   id:
                     type: string
                     format: uuid
-                  role:
-                    $ref: "#/components/schemas/Role"
+                  function:
+                    type: string
+                    enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
                   assignedAt:
                     type: string
                     format: date-time
-                  formation:
+                  session:
                     type: object
                     properties:
                       id:
                         type: string
                         format: uuid
-                      name:
+                      label:
                         type: string
-                      code:
+                      academicYear:
                         type: string
+                      status:
+                        $ref: "#/components/schemas/SessionStatus"
+                      formation:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          code:
+                            type: string
 
-    CoordinatorProfile:
-      type: object
-      nullable: true
-      properties:
-        id:
-          type: string
-          format: uuid
-        department:
-          type: string
-          nullable: true
-          example: Informatique
-        phoneNumber:
-          type: string
-          nullable: true
-          example: "0555123456"
+    # REMOVED 2026-05-01: CoordinatorProfile, SurveillantProfile, CorrectorProfile,
+    # JuryMemberProfile, AuditorProfile — these role-specific sub-tables were removed
+    # from the Prisma schema. Profile data is now stored as flat columns on User.
 
-    SurveillantProfile:
-      type: object
-      nullable: true
-      properties:
-        id:
-          type: string
-          format: uuid
-        phoneNumber:
-          type: string
-          nullable: true
-
-    CorrectorProfile:
-      type: object
-      nullable: true
-      properties:
-        id:
-          type: string
-          format: uuid
-        specialization:
-          type: string
-          nullable: true
-          example: Intelligence Artificielle
-        academicGrade:
-          type: string
-          nullable: true
-          example: Professeur
-        institution:
-          type: string
-          nullable: true
-          example: USTHB
-        isAvailable:
-          type: boolean
-          example: true
-
-    JuryMemberProfile:
-      type: object
-      nullable: true
-      properties:
-        id:
-          type: string
-          format: uuid
-        academicRank:
-          type: string
-          nullable: true
-          example: Professeur
-        institution:
-          type: string
-          nullable: true
-          example: ESI-SBA
-
-    AuditorProfile:
-      type: object
-      nullable: true
-      properties:
-        id:
-          type: string
-          format: uuid
-        scope:
-          type: string
-          nullable: true
-
+    # MODIFIED 2026-05-01: CreateUserBody — role is NO LONGER accepted at creation time.
+    # Users are created with role=NOT_ASSIGNED. Role is set when assigned to a session
+    # via POST /sessions/{id}/staff. Removed: role, department, academicRank, scope.
+    # Added: phoneNumber, institution, academicGrade, specialization (optional, role-agnostic).
     CreateUserBody:
       type: object
-      required: [firstName, lastName, email, role]
+      required: [firstName, lastName, email]
       properties:
         firstName:
           type: string
@@ -290,36 +281,21 @@ components:
           type: string
           format: email
           example: ahmed.benali@usthb.dz
-        role:
-          type: string
-          enum: [COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
-        department:
-          type: string
-          description: Required for COORDINATOR
-          example: Informatique
         phoneNumber:
           type: string
-          description: For COORDINATOR or SURVEILLANT
-        specialization:
-          type: string
-          description: For CORRECTOR
-          example: Intelligence Artificielle
-        academicGrade:
-          type: string
-          description: For CORRECTOR
-          example: Professeur
+          example: "0555123456"
         institution:
           type: string
-          description: For CORRECTOR or JURY_MEMBER
           example: USTHB
-        academicRank:
+        academicGrade:
           type: string
-          description: For JURY_MEMBER
           example: Professeur
-        scope:
+        specialization:
           type: string
-          description: For AUDITOR
+          example: Intelligence Artificielle
 
+    # MODIFIED 2026-05-01: UpdateUserBody — removed department, academicRank, scope, isAvailable
+    # (no longer exist on the User model). Kept flat fields that match UpdateUserSchema.
     UpdateUserBody:
       type: object
       properties:
@@ -329,24 +305,18 @@ components:
         lastName:
           type: string
           minLength: 2
-        department:
-          type: string
         phoneNumber:
-          type: string
-        specialization:
-          type: string
-        academicGrade:
           type: string
         institution:
           type: string
-        academicRank:
+        academicGrade:
           type: string
-        scope:
+        specialization:
           type: string
-        isAvailable:
-          type: boolean
 
     # ── Formation ─────────────────────────────────────────────────────────────
+    # MODIFIED 2026-05-01: FormationSummary now includes coordinator object and
+    # active specializations (sub-table added to schema). Removed staff count.
     FormationSummary:
       type: object
       properties:
@@ -367,49 +337,58 @@ components:
           nullable: true
         isActive:
           type: boolean
+        coordinatorId:
+          type: string
+          format: uuid
         createdAt:
           type: string
           format: date-time
+        coordinator:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            firstName:
+              type: string
+            lastName:
+              type: string
+        specializations:
+          type: array
+          description: Active specializations for this formation
+          items:
+            $ref: "#/components/schemas/Specialization"
         _count:
           type: object
           properties:
             sessions:
               type: integer
-            staff:
-              type: integer
 
+    # MODIFIED 2026-05-01: FormationDetail now shows specializations (not staff).
+    # Staff is now managed per-session via /sessions/{id}/staff.
     FormationDetail:
       allOf:
         - $ref: "#/components/schemas/FormationSummary"
         - type: object
           properties:
-            staff:
+            coordinator:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                email:
+                  type: string
+            specializations:
               type: array
               items:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  role:
-                    $ref: "#/components/schemas/Role"
-                  assignedAt:
-                    type: string
-                    format: date-time
-                  user:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                        format: uuid
-                      firstName:
-                        type: string
-                      lastName:
-                        type: string
-                      email:
-                        type: string
-                      role:
-                        $ref: "#/components/schemas/Role"
+                $ref: "#/components/schemas/Specialization"
             sessions:
               type: array
               items:
@@ -433,9 +412,12 @@ components:
                       candidates:
                         type: integer
 
+    # MODIFIED 2026-05-01: CreateFormationBody now requires coordinatorId.
+    # The assigned user becomes the formation coordinator (role flipped to COORDINATOR
+    # if they were NOT_ASSIGNED).
     CreateFormationBody:
       type: object
-      required: [name, code, department]
+      required: [name, code, department, coordinatorId]
       properties:
         name:
           type: string
@@ -453,35 +435,38 @@ components:
         description:
           type: string
           example: Formation doctorale en informatique quantique
+        coordinatorId:
+          type: string
+          format: uuid
+          description: User ID of the formation coordinator (must be active)
 
-    # UPDATED — isActive added, code is intentionally excluded (immutable identifier)
+    # MODIFIED 2026-05-01: UpdateFormationBody — added coordinatorId to allow
+    # reassigning the coordinator. Kept minLength correct per Zod schema.
     UpdateFormationBody:
       type: object
       properties:
         name:
           type: string
-          minLength: 1
+          minLength: 2
         department:
           type: string
-          minLength: 1
+          minLength: 2
         description:
           type: string
         isActive:
           type: boolean
-
-    AssignStaffBody:
-      type: object
-      required: [userId, role]
-      properties:
-        userId:
+        coordinatorId:
           type: string
           format: uuid
-        role:
-          type: string
-          enum: [COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+          description: Reassign the formation coordinator (must be active user)
 
-    # UPDATED — FormationStaff item shape (returned by GET /formations/:id/staff and GET /sessions/:id/staff)
-    FormationStaffItem:
+    # REMOVED 2026-05-01: AssignStaffBody — formation staff routes removed.
+    # Staff is now assigned per-session via POST /sessions/{id}/staff.
+
+    # REMOVED 2026-05-01: FormationStaffItem — replaced by SessionStaffItem below.
+
+    # ADDED 2026-05-01: Specialization — a doctoral programme track within a formation.
+    Specialization:
       type: object
       properties:
         id:
@@ -490,8 +475,107 @@ components:
         formationId:
           type: string
           format: uuid
-        role:
-          $ref: "#/components/schemas/Role"
+        name:
+          type: string
+          example: Intelligence Artificielle
+        code:
+          type: string
+          example: IA-01
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    # ADDED 2026-05-01: CreateSpecializationBody
+    CreateSpecializationBody:
+      type: object
+      required: [name, code]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          example: Intelligence Artificielle
+        code:
+          type: string
+          minLength: 1
+          maxLength: 20
+          example: IA-01
+
+    # ADDED 2026-05-01: UpdateSpecializationBody
+    UpdateSpecializationBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        isActive:
+          type: boolean
+
+    # ADDED 2026-05-01: SessionSpecialization — links a formation specialization to
+    # a session with available slots and candidate count.
+    SessionSpecialization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        formationSpecializationId:
+          type: string
+          format: uuid
+        availableSlots:
+          type: integer
+          example: 10
+        formationSpecialization:
+          $ref: "#/components/schemas/Specialization"
+        _count:
+          type: object
+          properties:
+            candidates:
+              type: integer
+
+    # ADDED 2026-05-01: AddSessionSpecializationBody
+    AddSessionSpecializationBody:
+      type: object
+      required: [formationSpecializationId, availableSlots]
+      properties:
+        formationSpecializationId:
+          type: string
+          format: uuid
+          description: Must be an active specialization belonging to this session's formation
+        availableSlots:
+          type: integer
+          minimum: 1
+          example: 10
+
+    # ADDED 2026-05-01: UpdateSessionSpecializationBody
+    UpdateSessionSpecializationBody:
+      type: object
+      properties:
+        availableSlots:
+          type: integer
+          minimum: 1
+
+    # ADDED 2026-05-01: SessionStaffItem — a user assigned to a session with a function.
+    # Replaces FormationStaffItem (which was formation-scoped, not session-scoped).
+    SessionStaffItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        function:
+          type: string
+          enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
         assignedAt:
           type: string
           format: date-time
@@ -507,12 +591,31 @@ components:
               type: string
             email:
               type: string
-            role:
-              $ref: "#/components/schemas/Role"
-            isActive:
-              type: boolean
+            institution:
+              type: string
+              nullable: true
+            academicGrade:
+              type: string
+              nullable: true
+            specialization:
+              type: string
+              nullable: true
 
-    # ── Session ───────────────────────────────────────────────────────────────
+    # ADDED 2026-05-01: AssignSessionStaffBody — used by POST /sessions/{id}/staff.
+    # Uses `function` (not `role`) to match the Zod AssignStaffSchema exactly.
+    AssignSessionStaffBody:
+      type: object
+      required: [userId, function]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        function:
+          type: string
+          enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+
+    # MODIFIED 2026-05-01: SessionSummary — removed availableSlots (moved to
+    # SessionSpecialization). Added specializations array.
     SessionSummary:
       type: object
       properties:
@@ -520,9 +623,6 @@ components:
           type: string
           format: uuid
         formationId:
-          type: string
-          format: uuid
-        coordinatorId:
           type: string
           format: uuid
         academicYear:
@@ -533,12 +633,17 @@ components:
           example: Concours Doctorat Informatique 2025/2026
         status:
           $ref: "#/components/schemas/SessionStatus"
-        availableSlots:
-          type: integer
-          example: 20
         examDate:
           type: string
           format: date-time
+        attendanceDeadline:
+          type: string
+          format: date-time
+          nullable: true
+        correctionDeadline:
+          type: string
+          format: date-time
+          nullable: true
         resultsDeadline:
           type: string
           format: date-time
@@ -553,15 +658,21 @@ components:
               type: string
             code:
               type: string
-        coordinator:
-          type: object
-          properties:
-            firstName:
-              type: string
-            lastName:
-              type: string
-            email:
-              type: string
+            coordinator:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+        specializations:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionSpecialization"
         _count:
           type: object
           properties:
@@ -582,10 +693,11 @@ components:
             gradingConfig:
               $ref: "#/components/schemas/GradingConfig"
 
-    # UPDATED — examRoom removed (rooms now managed via /sessions/:id/rooms)
+    # MODIFIED 2026-05-01: CreateSessionBody — removed availableSlots (now per-specialization).
+    # Added optional attendanceDeadline and correctionDeadline (from Zod CreateSessionSchema).
     CreateSessionBody:
       type: object
-      required: [formationId, academicYear, label, availableSlots, examDate]
+      required: [formationId, academicYear, label, examDate]
       properties:
         formationId:
           type: string
@@ -598,32 +710,28 @@ components:
           type: string
           minLength: 2
           example: Concours Doctorat Informatique 2025/2026
-        availableSlots:
-          type: integer
-          minimum: 1
-          example: 20
         examDate:
           type: string
           format: date-time
           example: 2026-04-14T09:00:00.000Z
+        attendanceDeadline:
+          type: string
+          format: date-time
+          description: Optional deadline for attendance locking
+        correctionDeadline:
+          type: string
+          format: date-time
+          description: Optional deadline for correction
 
-    # UPDATED — reflects sessions.types.ts updateSessionSchema exactly
+    # MODIFIED 2026-05-01: UpdateSessionBody — removed coordinatorId, academicYear,
+    # availableSlots (not in Zod UpdateSessionSchema). Only label, examDate,
+    # attendanceDeadline, correctionDeadline are accepted.
     UpdateSessionBody:
       type: object
       properties:
-        coordinatorId:
-          type: string
-          format: uuid
-          description: Re-assign the session coordinator
-        academicYear:
-          type: string
-          minLength: 1
         label:
           type: string
-          minLength: 1
-        availableSlots:
-          type: integer
-          minimum: 1
+          minLength: 2
         examDate:
           type: string
           format: date-time
@@ -868,24 +976,34 @@ components:
                 surveillantAssignments:
                   type: integer
 
-    # NEW
+    # MODIFIED 2026-05-01: AddRoomToSessionBody — now requires specializationId
+    # (each room in a session is dedicated to a specific specialization).
+    # Also accepts optional usedCapacity override at assignment time.
     AddRoomToSessionBody:
       type: object
-      required: [roomId]
+      required: [roomId, specializationId]
       properties:
         roomId:
           type: string
           format: uuid
           description: ID of an active global Room to link to this session
+        specializationId:
+          type: string
+          format: uuid
+          description: ID of the SessionSpecialization this room serves
+        usedCapacity:
+          type: integer
+          minimum: 1
+          description: Optional capacity override for this room in this session
 
-    # NEW
+    # MODIFIED 2026-05-01: UpdateSessionRoomBody — usedCapacity is now optional
+    # (matches Zod updateSessionRoomSchema where usedCapacity is .optional()).
     UpdateSessionRoomBody:
       type: object
-      required: [usedCapacity]
       properties:
         usedCapacity:
           type: integer
-          minimum: 0
+          minimum: 1
           description: Override effective capacity for this room in this session. Cannot exceed room.capacity.
 
     # NEW
@@ -1185,7 +1303,8 @@ paths:
       description: |
         Authenticate with email and password.
         Returns user info and sets JWT in an httpOnly cookie.
-        The cookie is automatically sent on all subsequent requests.
+        The JWT token is also returned in the response body for non-cookie clients.
+        Rate-limited: max 10 requests per 15 minutes.
       tags: [Auth]
       security: []
       requestBody:
@@ -1202,13 +1321,15 @@ paths:
                   example: admin@concours.dz
                 password:
                   type: string
+                  minLength: 1
                   example: Admin@2026
             example:
               email: admin@concours.dz
               password: Admin@2026
       responses:
         "200":
-          description: Login successful — JWT cookie set
+          # MODIFIED 2026-05-01: Response now includes token in body alongside cookie
+          description: Login successful — JWT cookie set, token also in body
           content:
             application/json:
               schema:
@@ -1235,6 +1356,10 @@ paths:
                                 $ref: "#/components/schemas/Role"
                               mustChangePassword:
                                 type: boolean
+                          token:
+                            type: string
+                            description: JWT token (also set as httpOnly cookie)
+                            example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         "400":
           description: Validation error
           content:
@@ -1308,6 +1433,11 @@ paths:
         Change the current user's password.
         Clears the JWT cookie after success — user must re-login.
         Resets mustChangePassword to false.
+        Password policy (from Zod ChangePasswordSchema):
+          - Minimum 8 characters
+          - At least one uppercase letter
+          - At least one number
+          - New password must differ from old password
       tags: [Auth]
       requestBody:
         required: true
@@ -1319,10 +1449,14 @@ paths:
               properties:
                 oldPassword:
                   type: string
+                  minLength: 1
                   example: Admin@2026
                 newPassword:
+                  # MODIFIED 2026-05-01: Added pattern constraints matching Zod ChangePasswordSchema
                   type: string
                   minLength: 8
+                  pattern: '^(?=.*[A-Z])(?=.*[0-9]).+$'
+                  description: Must contain at least one uppercase letter and one number
                   example: NewAdmin@2026
       responses:
         "200":
@@ -1332,7 +1466,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
         "400":
-          description: Current password incorrect or validation error
+          description: |
+            One of:
+            - Current password incorrect
+            - New password same as old password
+            - Validation error (missing uppercase, number, or length)
         "401":
           description: Not authenticated
 
@@ -1341,8 +1479,9 @@ paths:
       summary: Forgot password
       description: |
         Sends a password reset link to the user's email.
-        Always returns the same response regardless of whether the email exists (security).
+        Always returns the same 200 response regardless of whether the email exists (security).
         Token expires in 15 minutes.
+        Rate-limited: max 10 requests per 15 minutes.
       tags: [Auth]
       security: []
       requestBody:
@@ -1364,6 +1503,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        # MODIFIED 2026-05-01: Added 500 — thrown when SMTP delivery fails (token rolled back)
+        "500":
+          description: Email delivery failed — SMTP error (token is cleared, try again later)
 
   /api/v1/auth/reset-password:
     post:
@@ -1373,6 +1515,10 @@ paths:
         Token is validated by SHA-256 hash comparison.
         Token can only be used once — cleared after use.
         Clears JWT cookie — user must re-login.
+        Password policy (from Zod ResetPasswordSchema):
+          - Minimum 8 characters
+          - At least one uppercase letter
+          - At least one number
       tags: [Auth]
       security: []
       requestBody:
@@ -1387,8 +1533,11 @@ paths:
                   type: string
                   description: Raw token from reset email URL
                 newPassword:
+                  # MODIFIED 2026-05-01: Added pattern constraints matching Zod ResetPasswordSchema
                   type: string
                   minLength: 8
+                  pattern: '^(?=.*[A-Z])(?=.*[0-9]).+$'
+                  description: Must contain at least one uppercase letter and one number
                   example: NewPass@123
       responses:
         "200":
@@ -1414,7 +1563,8 @@ paths:
           in: query
           schema:
             type: string
-          description: Search by firstName, lastName, or email
+         # MODIFIED 2026-05-01: Search now also covers institution field
+          description: Search by firstName, lastName, email, or institution
           example: Ahmed
         - name: role
           in: query
@@ -1459,9 +1609,10 @@ paths:
     post:
       summary: Create user
       description: |
-        Create a new user account with a role-specific profile.
-        A temporary password is generated and sent by email.
+        Create a new user account (role defaults to NOT_ASSIGNED).
+        A temporary 16-char hex password is generated and sent by email.
         The user must change the password on first login (mustChangePassword=true).
+        Role is assigned later via POST /sessions/{id}/staff.
         Admin only.
       tags: [Users]
       requestBody:
@@ -1472,34 +1623,26 @@ paths:
               $ref: "#/components/schemas/CreateUserBody"
             examples:
               corrector:
-                summary: Create a corrector
+                # MODIFIED 2026-05-01: Removed role field — not accepted at creation
+                summary: Create a future corrector
                 value:
                   firstName: Ahmed
                   lastName: Benali
                   email: ahmed.benali@usthb.dz
-                  role: CORRECTOR
                   specialization: Intelligence Artificielle
                   academicGrade: Professeur
                   institution: USTHB
-              juryMember:
-                summary: Create a jury member
-                value:
-                  firstName: Nabil
-                  lastName: Keskes
-                  email: keskes@esi-sba.dz
-                  role: JURY_MEMBER
-                  academicRank: Professeur
-                  institution: ESI-SBA
               surveillant:
-                summary: Create a surveillant
+                summary: Create a future surveillant
                 value:
                   firstName: Kaci
                   lastName: Mohamed
                   email: kaci@esi-sba.dz
-                  role: SURVEILLANT
                   phoneNumber: "0555123456"
       responses:
         "201":
+          # MODIFIED 2026-05-01: Response data is { user, emailSent } not { user, tempPassword }
+          # tempPassword is NOT returned in the response — it is emailed only
           description: User created — welcome email sent
           content:
             application/json:
@@ -1513,10 +1656,9 @@ paths:
                         properties:
                           user:
                             $ref: "#/components/schemas/UserDetail"
-                          tempPassword:
-                            type: string
-                            description: Temporary password (shown once — also emailed)
-                            example: a3f8b2c1d4e5f6a7
+                          emailSent:
+                            type: boolean
+                            description: Whether the welcome email was successfully delivered
         "400":
           description: Validation error
         "401":
@@ -1578,9 +1720,9 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateUserBody"
             example:
+              # MODIFIED 2026-05-01: Removed isAvailable (not a User field)
               firstName: Ahmed
               institution: USTO
-              isAvailable: false
       responses:
         "200":
           description: User updated
@@ -1678,7 +1820,8 @@ paths:
   /api/v1/formations:
     get:
       summary: List all formations
-      description: Returns all doctoral formations with session and staff counts. Any authenticated user.
+      # MODIFIED 2026-05-01: Now includes coordinator and active specializations
+      description: Returns all doctoral formations with sessions count, coordinator, and active specializations. Any authenticated user.
       tags: [Formations]
       responses:
         "200":
@@ -1707,11 +1850,13 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/CreateFormationBody"
+            # MODIFIED 2026-05-01: Added coordinatorId to example
             example:
               name: Doctorat en Informatique
               code: INFO-2026
               department: Informatique
               description: Formation doctorale en informatique quantique
+              coordinatorId: 123e4567-e89b-12d3-a456-426614174000
       responses:
         "201":
           description: Formation created
@@ -1724,6 +1869,8 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/FormationSummary"
+        "400":
+          description: Coordinator not found, inactive, or validation error
         "401":
           description: Not authenticated
         "403":
@@ -1760,11 +1907,11 @@ paths:
         "404":
           description: Formation not found
 
-    # UPDATED — added requestBody, proper description, error codes
+    # MODIFIED 2026-05-01: Updated description; coordinatorId now accepted
     patch:
       summary: Update formation
       description: |
-        Update formation name, department, description, or isActive flag.
+        Update formation name, department, description, isActive flag, or coordinator.
         Formation code cannot be changed (it is an immutable identifier).
         Admin only.
       tags: [Formations]
@@ -1795,7 +1942,9 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/FormationSummary"
+                        $ref: "#/components/schemas/FormationDetail"
+        "400":
+          description: Coordinator not found or inactive
         "401":
           description: Not authenticated
         "403":
@@ -1803,13 +1952,15 @@ paths:
         "404":
           description: Formation not found
 
-  /api/v1/formations/{id}/staff:
-    # UPDATED — was a stub, now fully documented
-    get:
-      summary: List formation staff
+    # ADDED 2026-05-01: DELETE /formations/{id} — smart delete (hard if no sessions, soft otherwise)
+    delete:
+      summary: Delete or deactivate formation
       description: |
-        Returns all staff members assigned to a formation, including their user info and role.
-        Any authenticated user.
+        Smart delete:
+        - If no sessions exist: permanently deletes the formation and its specializations.
+        - If sessions exist: soft-deactivates (isActive=false). Formation cannot be re-activated via this endpoint.
+        Returns `{ permanent: true }` or `{ permanent: false }` to indicate the outcome.
+        Admin only.
       tags: [Formations]
       parameters:
         - name: id
@@ -1820,7 +1971,51 @@ paths:
             format: uuid
       responses:
         "200":
-          description: List of formation staff
+          description: Formation deleted or deactivated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          permanent:
+                            type: boolean
+                            description: true = hard deleted, false = soft deactivated
+        "400":
+          description: Formation is already inactive
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "404":
+          description: Formation not found
+
+  # MODIFIED 2026-05-01: /formations/{id}/staff routes REMOVED — staff is now managed
+  # per-session via /sessions/{id}/staff. Replaced with specializations CRUD below.
+
+  # ADDED 2026-05-01: Formation Specializations
+  /api/v1/formations/{id}/specializations:
+    get:
+      summary: List formation specializations
+      description: Returns all specializations (active and inactive) for a formation. Any authenticated user.
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of specializations
           content:
             application/json:
               schema:
@@ -1831,19 +2026,18 @@ paths:
                       data:
                         type: array
                         items:
-                          $ref: "#/components/schemas/FormationStaffItem"
+                          $ref: "#/components/schemas/Specialization"
         "401":
           description: Not authenticated
         "404":
           description: Formation not found
 
     post:
-      summary: Assign staff to formation
+      summary: Add specialization to formation
       description: |
-        Assign a user to a formation with a specific role.
-        The user's system role must match the assigned formation role.
-        A user can hold multiple roles across multiple formations.
-        Formation must be active. User must be active.
+        Create a new doctoral specialization within a formation.
+        Code must be unique within the formation.
+        Formation must be active.
         Admin only.
       tags: [Formations]
       parameters:
@@ -1858,13 +2052,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AssignStaffBody"
+              $ref: "#/components/schemas/CreateSpecializationBody"
             example:
-              userId: 123e4567-e89b-12d3-a456-426614174000
-              role: CORRECTOR
+              name: Intelligence Artificielle
+              code: IA-01
       responses:
-        "200":
-          description: Staff assigned successfully — assignment email sent to user
+        "201":
+          description: Specialization created
           content:
             application/json:
               schema:
@@ -1873,23 +2067,104 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/FormationStaffItem"
+                        $ref: "#/components/schemas/Specialization"
         "400":
-          description: Role mismatch (user's system role ≠ assigned role) or formation/user is inactive
+          description: Formation inactive or validation error
         "401":
           description: Not authenticated
         "403":
           description: Forbidden — Admin only
         "404":
-          description: Formation or user not found
+          description: Formation not found
         "409":
-          description: Staff already assigned with this role
+          description: Specialization code already exists in this formation
 
-  /api/v1/formations/{id}/staff/{userId}:
+  /api/v1/formations/{id}/specializations/{specId}:
+    get:
+      summary: Get specialization by ID
+      description: Returns a single specialization. Any authenticated user.
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: specId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Specialization detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Specialization"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Specialization not found
+
+    patch:
+      summary: Update specialization
+      description: Update a specialization's name or deactivate it. Admin only.
+      tags: [Formations]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: specId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpecializationBody"
+            example:
+              name: IA et Machine Learning
+              isActive: false
+      responses:
+        "200":
+          description: Specialization updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Specialization"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin only
+        "404":
+          description: Specialization not found
+
     delete:
-      summary: Remove staff from formation
+      summary: Delete or deactivate specialization
       description: |
-        Remove a user's staff assignment from a formation.
+        Smart delete:
+        - If not used in any session: permanently deleted.
+        - If used in sessions: soft-deactivated (isActive=false).
         Admin only.
       tags: [Formations]
       parameters:
@@ -1899,7 +2174,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: userId
+        - name: specId
           in: path
           required: true
           schema:
@@ -1907,17 +2182,28 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Staff removed successfully
+          description: Specialization deleted or deactivated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          permanent:
+                            type: boolean
         "401":
           description: Not authenticated
         "403":
           description: Forbidden — Admin only
         "404":
-          description: Staff assignment not found
+          description: Specialization not found
 
   # ══ SESSIONS ════════════════════════════════════════════════════════════════
   /api/v1/sessions:
@@ -1957,11 +2243,11 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/CreateSessionBody"
+            # MODIFIED 2026-05-01: Removed availableSlots (moved to session specializations)
             example:
               formationId: 123e4567-e89b-12d3-a456-426614174000
               academicYear: "2025/2026"
               label: Concours Doctorat Informatique 2025/2026
-              availableSlots: 20
               examDate: "2026-04-14T09:00:00.000Z"
       responses:
         "201":
@@ -2013,13 +2299,13 @@ paths:
         "404":
           description: Session not found
 
-    # UPDATED — added requestBody, proper description, error codes
+    # MODIFIED 2026-05-01: Updated patch example (removed availableSlots, not in UpdateSessionSchema)
     patch:
       summary: Update session
       description: |
         Update session fields. Session must be in DRAFT status.
         Updating examDate automatically recomputes resultsDeadline (examDate + 5 days).
-        Status transitions are handled by a dedicated endpoint (PATCH /sessions/:id/status).
+        Accepted fields: label, examDate, attendanceDeadline, correctionDeadline.
         Admin or Coordinator only.
       tags: [Sessions]
       parameters:
@@ -2036,7 +2322,7 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateSessionBody"
             example:
-              availableSlots: 25
+              label: Concours Informatique — Session 2
               examDate: "2026-05-01T09:00:00.000Z"
       responses:
         "200":
@@ -2051,21 +2337,71 @@ paths:
                       data:
                         $ref: "#/components/schemas/SessionSummary"
         "400":
-          description: Validation error
+          description: Validation error or session is not in DRAFT status
         "401":
           description: Not authenticated
         "403":
-          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
+          description: Forbidden — Admin or Coordinator only
         "404":
           description: Session not found
 
-  # UPDATED — was a stub, now fully documented
+    # ADDED 2026-05-01: DELETE /sessions/{id} — DRAFT-only hard delete
+    delete:
+      summary: Delete session
+      description: |
+        Permanently deletes a DRAFT session.
+        Pre-conditions:
+          - Session must be in DRAFT status
+          - Session must have 0 candidates and 0 subjects (remove them first)
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session permanently deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          permanent:
+                            type: boolean
+                            example: true
+        "400":
+          description: |
+            One of:
+            - Session is not in DRAFT status
+            - Session has existing candidates or subjects
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Session not found
+
+  # MODIFIED 2026-05-01: /sessions/{id}/staff — updated to use SessionStaffItem
+  # (not FormationStaffItem). Staff now has `function` field (not `role`).
+  # Added POST (assign staff) and DELETE (remove staff) routes.
   /api/v1/sessions/{id}/staff:
     get:
       summary: Get session staff
       description: |
-        Returns all staff members assigned to the formation that this session belongs to.
-        Useful for populating corrector/surveillant selection dropdowns.
+        Returns all users assigned to this specific session with their function.
+        Includes user info (institution, academicGrade, specialization).
         Any authenticated user.
       tags: [Sessions]
       parameters:
@@ -2077,7 +2413,7 @@ paths:
             format: uuid
       responses:
         "200":
-          description: Formation staff for this session's formation
+          description: Session staff list
           content:
             application/json:
               schema:
@@ -2085,17 +2421,278 @@ paths:
                   - $ref: "#/components/schemas/SuccessResponse"
                   - type: object
                     properties:
-                      message:
-                        type: string
-                        example: Staff retrieved
                       data:
                         type: array
                         items:
-                          $ref: "#/components/schemas/FormationStaffItem"
+                          $ref: "#/components/schemas/SessionStaffItem"
         "401":
           description: Not authenticated
         "404":
           description: Session not found
+
+    post:
+      summary: Assign staff to session
+      description: |
+        Assign a user to a session with a specific function (CORRECTOR, JURY_MEMBER, etc.).
+        If the user was NOT_ASSIGNED, their role is automatically upgraded to match the function.
+        Session must be in DRAFT status. User must be active.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignSessionStaffBody"
+            example:
+              userId: 123e4567-e89b-12d3-a456-426614174000
+              function: CORRECTOR
+      responses:
+        "201":
+          description: Staff assigned successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionStaffItem"
+        "400":
+          description: User is inactive or session is not in DRAFT status
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Session or user not found
+        "409":
+          description: User already assigned with this function
+
+  # ADDED 2026-05-01: DELETE /sessions/{id}/staff/{userId}/{function}
+  /api/v1/sessions/{id}/staff/{userId}/{function}:
+    delete:
+      summary: Remove staff from session
+      description: |
+        Remove a specific staff assignment by userId and function.
+        The combination of sessionId + userId + function identifies the record.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: function
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+      responses:
+        "200":
+          description: Staff removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Staff assignment not found
+
+  # ADDED 2026-05-01: Session Specializations
+  /api/v1/sessions/{id}/specializations:
+    get:
+      summary: List session specializations
+      description: Returns all specializations configured for this session (with candidate counts). Any authenticated user.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session specialization list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SessionSpecialization"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
+
+    post:
+      summary: Add specialization to session
+      description: |
+        Add an active formation specialization to this session with a slot count.
+        Session must be in DRAFT status.
+        Specialization must belong to this session's formation and be active.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddSessionSpecializationBody"
+            example:
+              formationSpecializationId: 123e4567-e89b-12d3-a456-426614174000
+              availableSlots: 10
+      responses:
+        "201":
+          description: Specialization added to session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionSpecialization"
+        "400":
+          description: Session is not in DRAFT status or specialization is inactive
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Specialization not found in this formation
+        "409":
+          description: Specialization already added to this session
+
+  /api/v1/sessions/{id}/specializations/{specId}:
+    patch:
+      summary: Update session specialization
+      description: Update available slots for a session specialization. Session must be in DRAFT status. Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: specId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionSpecializationBody"
+            example:
+              availableSlots: 15
+      responses:
+        "200":
+          description: Session specialization updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SessionSpecialization"
+        "400":
+          description: Session not in DRAFT status
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Session specialization not found
+
+    delete:
+      summary: Remove specialization from session
+      description: |
+        Remove a specialization from a session.
+        Session must be in DRAFT status.
+        Cannot remove if candidates are linked to this specialization.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: specId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Specialization removed from session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          permanent:
+                            type: boolean
+                            example: true
+        "400":
+          description: Session not in DRAFT status or candidates linked to specialization
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Specialization not found
 
   /api/v1/sessions/{id}/subjects:
     # UPDATED — was a stub, now fully documented
@@ -2345,17 +2942,18 @@ paths:
         "404":
           description: Session not found
 
-  # UPDATED — was a stub, now fully documented
+  # MODIFIED 2026-05-01: openSession — 403 is thrown when session is already OPEN
+  # (not 400). 400 is only for missing pre-conditions (no subjects, no config, no candidates).
   /api/v1/sessions/{id}/status:
     patch:
       summary: Open session (DRAFT → OPEN)
       description: |
         Transition a session from DRAFT to OPEN status.
         Pre-conditions (all must pass):
-          1. Session must currently be in DRAFT status
-          2. At least one subject must be defined
-          3. Grading config must be set
-          4. At least one candidate must have been imported
+          1. Session must currently be in DRAFT status (403 if not DRAFT)
+          2. At least one subject must be defined (400 if missing)
+          3. Grading config must be set (400 if missing)
+          4. At least one candidate must have been imported (400 if missing)
         Admin or Coordinator only.
       tags: [Sessions]
       parameters:
@@ -2386,7 +2984,10 @@ paths:
         "401":
           description: Not authenticated
         "403":
-          description: Forbidden — Admin or Coordinator only, or session is not in DRAFT status
+          description: |
+            Forbidden — one of:
+            - Not Admin or Coordinator
+            - Session is not in DRAFT status (already OPEN or CLOSED)
         "404":
           description: Session not found
 

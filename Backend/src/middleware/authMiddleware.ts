@@ -1,47 +1,38 @@
+// src/middleware/authMiddleware.ts
 import type { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
-import { AppError } from "../utils/AppError.js";
+import { verifyToken } from "../utils/jwt.js";
 import { identityDb } from "../config/db.js";
-import { JWT_SECRET } from "../config/env.js";
-import type { Role } from "../generated/identity/client.js";
-
-// 1. Define the User payload interface
-export interface AuthUser {
-  id: string;
-  email: string;
-  role: Role; // Using the Prisma Enum here is better for RBAC
-  firstName: string;
-  lastName: string;
-}
-
-// 2. Extend the Express Request type
-export interface AuthRequest extends Request {
-  user?: AuthUser;
-}
+import { AppError } from "../utils/AppError.js";
 
 export const protect = async (
-  req: AuthRequest, // Use AuthRequest here
+  req: Request,
   _res: Response,
   next: NextFunction,
 ) => {
   try {
+    // extract token from cookie or Authorization header
     let token: string | undefined;
 
     if (req.cookies?.jwt) {
       token = req.cookies.jwt;
-    } else if (req.headers.authorization?.startsWith("Bearer")) {
+    } else if (req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
     }
 
     if (!token) {
-      return next(new AppError("You are not logged in", 401));
+      return next(new AppError("Not authenticated — please log in", 401));
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as {
+    // verify token
+    const decoded = verifyToken(token) as {
       id: string;
+      email: string;
       role: string;
+      firstName: string;
+      lastName: string;
     };
 
+    // live DB lookup — ensures deactivated users can't use old tokens
     const user = await identityDb.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -55,21 +46,29 @@ export const protect = async (
     });
 
     if (!user || !user.isActive) {
-      return next(new AppError("User no longer exists or is inactive", 401));
+      return next(new AppError("User not found or account is inactive", 401));
     }
 
-    // Attach user to request
+    // NOT_ASSIGNED users cannot access anything except auth routes
+    if (user.role === "NOT_ASSIGNED") {
+      return next(
+        new AppError(
+          "Account not yet assigned — contact your administrator",
+          403,
+        ),
+      );
+    }
+
     req.user = {
       id: user.id,
       email: user.email,
-      role: user.role as Role,
+      role: user.role,
       firstName: user.firstName,
       lastName: user.lastName,
     };
 
     next();
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (error) {
-    next(new AppError("Invalid or expired token", 401));
+  } catch {
+    next(new AppError("Invalid or expired token — please log in again", 401));
   }
 };

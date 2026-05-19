@@ -46,16 +46,58 @@ export const importCandidates = async (
     },
   });
 
-  // 5. insert valid candidates — skip duplicates gracefully
-  const candidatesToInsert = valid.map((row) => ({
-    ...row,
-    email: row.email || null,
-    phoneNumber: row.phoneNumber || null,
-    nationalId: row.nationalId || null,
-    sessionId,
-    importBatchId: batch.id,
-    status: "REGISTERED" as const,
-  }));
+  // 5. fetch session specializations for matching
+  const sessionSpecs = await identityDb.sessionSpecialization.findMany({
+    where: { sessionId },
+    include: { formationSpecialization: true },
+  });
+
+  // 6. insert valid candidates — map data and match specialization
+  const candidatesToInsert = valid.map((row) => {
+    const matchedSpec = sessionSpecs.find((s) => {
+      const specName = s.formationSpecialization.name.toLowerCase();
+      const specCode = s.formationSpecialization.code.toLowerCase();
+      const rowSpec = (row.degreeSpeciality ?? row.fieldOfStudy ?? "")
+        .toLowerCase()
+        .trim();
+
+      // Guard: prevent empty strings from returning true on .includes()
+      if (!rowSpec) return false;
+
+      return (
+        specName === rowSpec ||
+        specCode === rowSpec ||
+        specName.includes(rowSpec) ||
+        rowSpec.includes(specName)
+      );
+    });
+
+    return {
+      sessionId,
+      importBatchId: batch.id,
+      status: "REGISTERED" as const,
+      registrationNumber: row.registrationNumber,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      firstNameAr: row.firstNameAr || null,
+      lastNameAr: row.lastNameAr || null,
+      email: row.email || null,
+      phoneNumber: row.phoneNumber || null,
+      address: row.address || null,
+      dateOfBirth: row.dateOfBirth || null,
+      birthPlace: row.birthPlace || null,
+      nationalId: row.nationalId || null,
+      degreeInstitution: row.degreeInstitution || null,
+      degreeSpeciality: row.degreeSpeciality || null,
+      fieldOfStudy: row.fieldOfStudy || null,
+      cursusType: row.cursusType || null,
+      graduationYear: row.graduationYear ?? null,
+      masterClassCategory: row.masterClassCategory || null,
+      masterAverage: row.masterAverage ?? null,
+      bachelorAverage: row.bachelorAverage ?? null,
+      specializationId: matchedSpec?.id ?? null, // ← matched here
+    };
+  });
 
   // FIX: Added clarifying comment regarding `skipDuplicates` limitation (Issue 3)
   // NOTE: `createMany` with `skipDuplicates: true` conflates skipped-duplicates with

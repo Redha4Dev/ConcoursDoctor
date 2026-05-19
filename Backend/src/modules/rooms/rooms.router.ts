@@ -1,3 +1,4 @@
+// src/modules/rooms/rooms.router.ts
 import { Router } from "express";
 import { protect } from "../../middleware/authMiddleware.js";
 import { restrictTo } from "../../middleware/rbac.middleware.js";
@@ -9,23 +10,20 @@ const router = Router();
 
 router.use(protect);
 
-// ─── GLOBAL ROOM MANAGEMENT (ADMIN) ──────────────────────────────────────────
+// ─── GLOBAL ROOM MANAGEMENT (ADMIN only) ─────────────────────────────────────
 router.post(
   "/",
   restrictTo("ADMIN"),
   validate(createRoomSchema),
   ctrl.createRoom,
 );
-
 router.get("/", ctrl.listRooms);
-
 router.patch(
   "/:id",
   restrictTo("ADMIN"),
   validate(updateRoomSchema),
   ctrl.updateRoom,
 );
-
-router.delete("/:id", restrictTo("ADMIN"), ctrl.deactivateRoom);
+router.delete("/:id", restrictTo("ADMIN"), ctrl.deleteRoom);
 
 export { router as roomsRouter };

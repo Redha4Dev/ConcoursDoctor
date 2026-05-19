@@ -1,3 +1,4 @@
+// src/modules/users/users.service.ts
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { identityDb } from "../../config/db.js";
@@ -5,66 +6,12 @@ import { AppError } from "../../utils/AppError.js";
 import { sendEmail } from "../../utils/mailer.js";
 import { tempPasswordTemplate } from "../../utils/emailTemplates.js";
 import type { CreateUserDto, UpdateUserDto } from "./users.types.js";
-import type { Role } from "../../generated/identity/client.js";
+import type { Prisma } from "../../generated/identity/client.js"; // Assuming this is your generated path
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const generateTempPassword = (): string =>
   crypto.randomBytes(8).toString("hex");
-
-const buildFullName = (firstName: string, lastName: string): string =>
-  `${firstName} ${lastName}`;
-
-const buildProfileCreate = (role: Role, dto: CreateUserDto) => {
-  switch (role) {
-    case "COORDINATOR":
-      return {
-        coordinatorProfile: {
-          create: {
-            department:  dto.department  ?? null,
-            phoneNumber: dto.phoneNumber ?? null,
-          },
-        },
-      };
-    case "SURVEILLANT":
-      return {
-        surveillantProfile: {
-          create: {
-            phoneNumber: dto.phoneNumber ?? null,
-          },
-        },
-      };
-    case "CORRECTOR":
-      return {
-        correctorProfile: {
-          create: {
-            specialization: dto.specialization ?? null,
-            academicGrade:  dto.academicGrade  ?? null,
-            institution:    dto.institution    ?? null,
-          },
-        },
-      };
-    case "JURY_MEMBER":
-      return {
-        juryMemberProfile: {
-          create: {
-            academicRank: dto.academicRank ?? null,
-            institution:  dto.institution  ?? null,
-          },
-        },
-      };
-    case "AUDITOR":
-      return {
-        auditorProfile: {
-          create: {
-            scope: dto.scope ?? null,
-          },
-        },
-      };
-    default:
-      return {};
-  }
-};
 
 // ─── CREATE ───────────────────────────────────────────────────────────────────
 
@@ -79,39 +26,40 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
 
   const user = await identityDb.user.create({
     data: {
-      firstName:          dto.firstName,
-      lastName:           dto.lastName,
-      email:              dto.email,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      email: dto.email,
       passwordHash,
-      role:               dto.role,
+      role: "NOT_ASSIGNED", // Matches schema default
       createdBy,
       mustChangePassword: true,
-      ...buildProfileCreate(dto.role, dto),
+      phoneNumber: dto.phoneNumber ?? null,
+      institution: dto.institution ?? null,
+      academicGrade: dto.academicGrade ?? null,
+      specialization: dto.specialization ?? null,
     },
     select: {
-      id:                 true,
-      firstName:          true,
-      lastName:           true,
-      email:              true,
-      role:               true,
-      isActive:           true,
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isActive: true,
       mustChangePassword: true,
-      createdAt:          true,
-      coordinatorProfile: true,
-      surveillantProfile: true,
-      correctorProfile:   true,
-      juryMemberProfile:  true,
-      auditorProfile:     true,
+      createdAt: true,
+      phoneNumber: true,
+      institution: true,
+      academicGrade: true,
+      specialization: true,
     },
   });
 
-  // send welcome email — fire and forget, never blocks user creation
-  const fullName = buildFullName(dto.firstName, dto.lastName);
+  // send welcome email — fire and forget
   const { subject, html } = tempPasswordTemplate(
-    fullName,
+    `${dto.firstName} ${dto.lastName}`,
     dto.email,
     tempPassword,
-    dto.role,
+    "STAFF",
   );
 
   let emailSent = false;
@@ -132,32 +80,24 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
 
 export const getUsers = async (filters: {
   search?: string;
-  role?:   string;
-  page?:   number;
-  limit?:  number;
+  role?: string; // Changed from systemRole to role to match schema
+  page?: number;
+  limit?: number;
 }) => {
   const { search, role, page = 1, limit = 20 } = filters;
   const skip = (page - 1) * limit;
 
-  // FIX: reject ADMIN filter early — cleaner than letting Prisma handle it
-  if (role && role === "ADMIN") {
-    throw new AppError("Cannot filter by ADMIN role", 400);
-  }
-
-  // FIX: build role filter correctly — Prisma v7 doesn't support
-  // both `not` and `equals` on the same field simultaneously
-  const roleFilter: { equals?: Role; notIn?: Role[] } = role
-    ? { equals: role as Role, notIn: ["ADMIN"] }
-    : { notIn: ["ADMIN"] };
-
-  const where = {
-    role: roleFilter,
+  // Build the dynamic where clause
+  const where: Prisma.UserWhereInput = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    role: role ? (role as any) : { notIn: ["ADMIN"] },
     ...(search
       ? {
           OR: [
-            { firstName: { contains: search, mode: "insensitive" as const } },
-            { lastName:  { contains: search, mode: "insensitive" as const } },
-            { email:     { contains: search, mode: "insensitive" as const } },
+            { firstName: { contains: search, mode: "insensitive" } },
+            { lastName: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { institution: { contains: search, mode: "insensitive" } },
           ],
         }
       : {}),
@@ -167,17 +107,31 @@ export const getUsers = async (filters: {
     identityDb.user.findMany({
       where,
       select: {
-        id:        true,
+        id: true,
         firstName: true,
-        lastName:  true,
-        email:     true,
-        role:      true,
-        isActive:  true,
+        lastName: true,
+        email: true,
+        role: true,
+        isActive: true,
         lastLogin: true,
         createdAt: true,
-        correctorProfile:   { select: { specialization: true, isAvailable: true } },
-        juryMemberProfile:  { select: { academicRank: true, institution: true } },
-        coordinatorProfile: { select: { department: true } },
+        institution: true,
+        academicGrade: true,
+        specialization: true,
+        // show what sessions this user is assigned to
+        sessionStaff: {
+          select: {
+            function: true,
+            session: {
+              select: {
+                id: true,
+                label: true,
+                academicYear: true,
+                formation: { select: { name: true, code: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       skip,
@@ -193,8 +147,8 @@ export const getUsers = async (filters: {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      hasNext:    page * limit < total,
-      hasPrev:    page > 1,
+      hasNext: page * limit < total,
+      hasPrev: page > 1,
     },
   };
 };
@@ -205,24 +159,31 @@ export const getUserById = async (id: string) => {
   const user = await identityDb.user.findUnique({
     where: { id },
     select: {
-      id:                 true,
-      firstName:          true,
-      lastName:           true,
-      email:              true,
-      role:               true,
-      isActive:           true,
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isActive: true,
       mustChangePassword: true,
-      lastLogin:          true,
-      createdAt:          true,
-      updatedAt:          true,
-      coordinatorProfile: true,
-      surveillantProfile: true,
-      correctorProfile:   true,
-      juryMemberProfile:  true,
-      auditorProfile:     true,
-      formationStaff: {
+      lastLogin: true,
+      createdAt: true,
+      updatedAt: true,
+      institution: true,
+      academicGrade: true,
+      specialization: true,
+      phoneNumber: true,
+      sessionStaff: {
         include: {
-          formation: { select: { id: true, name: true, code: true } },
+          session: {
+            select: {
+              id: true,
+              label: true,
+              academicYear: true,
+              status: true,
+              formation: { select: { name: true, code: true } },
+            },
+          },
         },
       },
     },
@@ -237,114 +198,116 @@ export const updateUser = async (id: string, dto: UpdateUserDto) => {
   const user = await identityDb.user.findUnique({ where: { id } });
   if (!user) throw new AppError("User not found", 404);
 
-  // FIX: build profile update only if there are fields to update
-  // An empty `update: {}` causes Prisma to throw
-  const buildProfileUpdate = () => {
-    switch (user.role) {
-      case "COORDINATOR": {
-        const data: Record<string, unknown> = {};
-        if (dto.department  !== undefined) data.department  = dto.department;
-        if (dto.phoneNumber !== undefined) data.phoneNumber = dto.phoneNumber;
-        if (Object.keys(data).length === 0) return {};
-        return { coordinatorProfile: { update: data } };
-      }
+  const data: Record<string, unknown> = {};
+  if (dto.firstName !== undefined) data.firstName = dto.firstName;
+  if (dto.lastName !== undefined) data.lastName = dto.lastName;
+  if (dto.phoneNumber !== undefined) data.phoneNumber = dto.phoneNumber;
+  if (dto.institution !== undefined) data.institution = dto.institution;
+  if (dto.academicGrade !== undefined) data.academicGrade = dto.academicGrade;
+  if (dto.specialization !== undefined)
+    data.specialization = dto.specialization;
+  // If dto.role is provided, add it to data here if you allow role updates
 
-      case "SURVEILLANT": {
-        const data: Record<string, unknown> = {};
-        if (dto.phoneNumber !== undefined) data.phoneNumber = dto.phoneNumber;
-        if (Object.keys(data).length === 0) return {};
-        return { surveillantProfile: { update: data } };
-      }
-
-      case "CORRECTOR": {
-        const data: Record<string, unknown> = {};
-        if (dto.specialization !== undefined) data.specialization = dto.specialization;
-        if (dto.academicGrade  !== undefined) data.academicGrade  = dto.academicGrade;
-        if (dto.institution    !== undefined) data.institution    = dto.institution;
-        if (dto.isAvailable    !== undefined) data.isAvailable    = dto.isAvailable;
-        if (Object.keys(data).length === 0) return {};
-        return { correctorProfile: { update: data } };
-      }
-
-      case "JURY_MEMBER": {
-        const data: Record<string, unknown> = {};
-        if (dto.academicRank !== undefined) data.academicRank = dto.academicRank;
-        if (dto.institution  !== undefined) data.institution  = dto.institution;
-        if (Object.keys(data).length === 0) return {};
-        return { juryMemberProfile: { update: data } };
-      }
-
-      case "AUDITOR": {
-        const data: Record<string, unknown> = {};
-        if (dto.scope !== undefined) data.scope = dto.scope;
-        if (Object.keys(data).length === 0) return {};
-        return { auditorProfile: { update: data } };
-      }
-
-      default:
-        return {};
-    }
-  };
-
-  // FIX: build base data first, only include name fields if passed
-  const baseData: Record<string, unknown> = {};
-  if (dto.firstName !== undefined) baseData.firstName = dto.firstName;
-  if (dto.lastName  !== undefined) baseData.lastName  = dto.lastName;
-
-  const profileUpdate = buildProfileUpdate();
-
-  // FIX: if nothing at all was passed, throw instead of running empty update
-  if (Object.keys(baseData).length === 0 && Object.keys(profileUpdate).length === 0) {
+  if (Object.keys(data).length === 0) {
     throw new AppError("No fields provided for update", 400);
   }
 
   return identityDb.user.update({
     where: { id },
-    data:  { ...baseData, ...profileUpdate },
+    data,
     select: {
-      id:                 true,
-      firstName:          true,
-      lastName:           true,
-      email:              true,
-      role:               true,
-      isActive:           true,
-      coordinatorProfile: true,
-      surveillantProfile: true,
-      correctorProfile:   true,
-      juryMemberProfile:  true,
-      auditorProfile:     true,
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true, // Fixed: Swapped systemRole out for role
+      isActive: true,
+      institution: true,
+      academicGrade: true,
+      specialization: true,
+      phoneNumber: true,
     },
   });
 };
 
-// ─── DEACTIVATE / REACTIVATE ──────────────────────────────────────────────────
+// ─── DELETE (smart — hard if no refs, soft if has refs) ──────────────────────
 
-export const deactivateUser = async (id: string) => {
-  const user = await identityDb.user.findUnique({ where: { id } });
-  if (!user)            throw new AppError("User not found", 404);
-  if (user.role === "ADMIN") throw new AppError("Cannot deactivate admin account", 403);
-  if (!user.isActive)   throw new AppError("User is already inactive", 400);
-
-  return identityDb.user.update({
+export const deleteUser = async (id: string) => {
+  const user = await identityDb.user.findUnique({
     where: { id },
-    data:  { isActive: false },
-    select: { id: true, firstName: true, lastName: true, isActive: true, role: true },
+    include: {
+      _count: {
+        select: {
+          auditLogs: true,
+          sessionStaff: true,
+          coordinatedFormations: true,
+          importBatches: true,
+          surveillantRoomAssignments: true, // This correctly matches schema
+        },
+      },
+    },
   });
+  if (!user) throw new AppError("User not found", 404);
+  if (user.role === "ADMIN") {
+    throw new AppError("Cannot delete admin account", 403);
+  }
+
+  const totalRefs =
+    user._count.auditLogs +
+    user._count.sessionStaff +
+    user._count.coordinatedFormations +
+    user._count.importBatches +
+    user._count.surveillantRoomAssignments;
+
+  if (totalRefs > 0) {
+    // has references — soft delete
+    if (!user.isActive) throw new AppError("User is already inactive", 400);
+    const updated = await identityDb.user.update({
+      where: { id },
+      data: { isActive: false },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+      },
+    });
+    return { ...updated, permanent: false };
+  }
+
+  // no references — hard delete
+  await identityDb.user.delete({ where: { id } });
+  return {
+    id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    permanent: true,
+  };
 };
+
+// ─── REACTIVATE ───────────────────────────────────────────────────────────────
 
 export const reactivateUser = async (id: string) => {
   const user = await identityDb.user.findUnique({ where: { id } });
-  if (!user)          throw new AppError("User not found", 404);
-  if (user.isActive)  throw new AppError("User is already active", 400);
+  if (!user) throw new AppError("User not found", 404);
+  if (user.isActive) throw new AppError("User is already active", 400);
 
   return identityDb.user.update({
     where: { id },
-    data:  { isActive: true },
-    select: { id: true, firstName: true, lastName: true, isActive: true, role: true },
+    data: { isActive: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      isActive: true,
+    },
   });
 };
 
-// ─── RESEND EMAIL ─────────────────────────────────────────────────────────────
+// ─── RESEND WELCOME EMAIL ─────────────────────────────────────────────────────
 
 export const resendWelcomeEmail = async (id: string) => {
   const user = await identityDb.user.findUnique({ where: { id } });
@@ -353,37 +316,34 @@ export const resendWelcomeEmail = async (id: string) => {
   const tempPassword = generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 12);
 
-  // reset password first — always, even if email fails
   await identityDb.user.update({
     where: { id },
-    data:  { passwordHash, mustChangePassword: true },
+    data: { passwordHash, mustChangePassword: true },
   });
 
-  const fullName = buildFullName(user.firstName, user.lastName);
   const { subject, html } = tempPasswordTemplate(
-    fullName,
+    `${user.firstName} ${user.lastName}`,
     user.email,
     tempPassword,
-    user.role,
+    "STAFF",
   );
 
-  // FIX: return emailSent status so controller can include it in response
   let emailSent = false;
   try {
     await sendEmail({ emailto: user.email, subject, html });
     emailSent = true;
   } catch (err: unknown) {
     console.error(
-      `[Email] Failed to resend welcome email to ${user.email}:`,
+      `[Email] Failed to resend email to ${user.email}:`,
       err instanceof Error ? err.message : err,
     );
   }
 
   return {
-    message:   emailSent
+    message: emailSent
       ? "Welcome email resent successfully"
       : "Password reset but email delivery failed — check SMTP config",
-    email:     user.email,
+    email: user.email,
     emailSent,
   };
 };

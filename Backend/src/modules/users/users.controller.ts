@@ -65,7 +65,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 export const deactivateUser = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const result = await usersService.deactivateUser(id);
+    const result = await usersService.deleteUser(id);
 
     // ✅ AUDIT
     audit({

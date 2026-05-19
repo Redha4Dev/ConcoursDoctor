@@ -1,4 +1,3 @@
-// prisma/identity/schema.prisma
 generator client {
   provider = "prisma-client"
   output   = "../../src/generated/identity"
@@ -8,7 +7,7 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── ENUMS ────────────────────────────────────
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
 
 enum Role {
   ADMIN
@@ -16,7 +15,8 @@ enum Role {
   SURVEILLANT
   CORRECTOR
   JURY_MEMBER
-  AUDITOR 
+  AUDITOR
+  NOT_ASSIGNED // default — user exists but has no function yet
 }
 
 enum SessionStatus {
@@ -43,95 +43,43 @@ enum ImportSource {
   MANUAL
 }
 
-// ─── USERS ────────────────────────────────────
+// ─── USER ─────────────────────────────────────────────────────────────────────
 
 model User {
-  id                 String    @id @default(uuid())
-  firstName          String  
-  lastName           String
-  email              String    @unique
-  passwordHash       String
-  role               Role
-  isActive           Boolean   @default(true)
-  mustChangePassword Boolean   @default(true)
-  lastLogin          DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  createdBy          String?
-  passwordResetToken String?
+  id                   String    @id @default(uuid())
+  firstName            String
+  lastName             String
+  email                String    @unique
+  passwordHash         String
+  role                 Role      @default(NOT_ASSIGNED)
+  isActive             Boolean   @default(true)
+  mustChangePassword   Boolean   @default(true)
+  lastLogin            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  createdBy            String?
+
+  // flat optional info — no sub-profiles
+  phoneNumber   String?
+  institution   String?
+  academicGrade String?
+  specialization String?
+
+  passwordResetToken   String?
   passwordResetExpires DateTime?
 
-  coordinatorProfile CoordinatorProfile?
-  surveillantProfile SurveillantProfile?
-  correctorProfile   CorrectorProfile?
-  juryMemberProfile  JuryMemberProfile?
-  auditorProfile     AuditorProfile?
+  // relations
+  auditLogs             AuditLog[]
+  coordinatedFormations DoctoralFormation[]
+  sessionStaff          SessionStaff[]
+  importBatches         ImportBatch[]
 
-  auditLogs                  AuditLog[]
-  formationStaff             FormationStaff[]
-  coordinatedSessions        CompetitionSession[]
-  importBatches              ImportBatch[]
   surveillantRoomAssignments RoomSurveillantAssignment[]
 
   @@map("users")
 }
 
-model CoordinatorProfile {
-  id          String  @id @default(uuid())
-  userId      String  @unique
-  department  String?
-  phoneNumber String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("coordinator_profiles")
-}
-
-model SurveillantProfile {
-  id          String  @id @default(uuid())
-  userId      String  @unique
-  phoneNumber String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("surveillant_profiles")
-}
-
-model CorrectorProfile {
-  id             String  @id @default(uuid())
-  userId         String  @unique
-  specialization String?
-  academicGrade  String?
-  institution    String?
-  isAvailable    Boolean @default(true)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("corrector_profiles")
-}
-
-model JuryMemberProfile {
-  id           String  @id @default(uuid())
-  userId       String  @unique
-  academicRank String?
-  institution  String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("jury_member_profiles")
-}
-
-model AuditorProfile {
-  id     String  @id @default(uuid())
-  userId String  @unique
-  scope  String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("auditor_profiles")
-}
-
-// ─── AUDIT LOG ────────────────────────────────
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
 
 model AuditLog {
   id        String   @id @default(uuid())
@@ -149,7 +97,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// ─── DOCTORAL FORMATION ───────────────────────
+// ─── DOCTORAL FORMATION ───────────────────────────────────────────────────────
 
 model DoctoralFormation {
   id          String   @id @default(uuid())
@@ -161,57 +109,103 @@ model DoctoralFormation {
   createdAt   DateTime @default(now())
   createdBy   String
 
-  staff    FormationStaff[]
-  sessions CompetitionSession[]
+  // coordinator fixed at formation creation — role flips to COORDINATOR
+  coordinatorId String
+  coordinator   User   @relation(fields: [coordinatorId], references: [id])
+
+  specializations FormationSpecialization[]
+  sessions        CompetitionSession[]
 
   @@map("doctoral_formations")
 }
 
-model FormationStaff {
-  id          String   @id @default(uuid())
+// ─── FORMATION SPECIALIZATION ─────────────────────────────────────────────────
+// Permanent specializations defined at the formation level
+// e.g. "Intelligence Artificielle", "Cybersécurité"
+// Sessions pick from these and set their own availableSlots each year
+
+model FormationSpecialization {
+  id          String  @id @default(uuid())
   formationId String
-  userId      String
-  role        Role
-  assignedAt  DateTime @default(now())
-  assignedBy  String
+  name        String
+  code        String
+  isActive    Boolean @default(true)
 
-  formation DoctoralFormation @relation(fields: [formationId], references: [id])
-  user      User              @relation(fields: [userId], references: [id])
+  formation              DoctoralFormation      @relation(fields: [formationId], references: [id])
+  sessionSpecializations SessionSpecialization[]
 
-  @@unique([formationId, userId, role])
-  @@map("formation_staff")
+  @@unique([formationId, code])
+  @@map("formation_specializations")
 }
 
-// ─── COMPETITION SESSION ──────────────────────
+// ─── COMPETITION SESSION ──────────────────────────────────────────────────────
 
 model CompetitionSession {
   id                 String        @id @default(uuid())
   formationId        String
-  coordinatorId      String
   academicYear       String
   label              String
   status             SessionStatus @default(DRAFT)
-  availableSlots     Int
   examDate           DateTime
+  resultsDeadline    DateTime?     // auto: examDate + 5 days
   attendanceDeadline DateTime?
   correctionDeadline DateTime?
-  resultsDeadline    DateTime? 
-  
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  formation              DoctoralFormation           @relation(fields: [formationId], references: [id])
-  coordinator            User                        @relation(fields: [coordinatorId], references: [id])
-  subjects               Subject[]
-  gradingConfig          GradingConfig?
-  candidates             Candidate[]
-  importBatches          ImportBatch[]
-  sessionRooms           SessionRoom[]
-  surveillantAssignments RoomSurveillantAssignment[]
-  candidateAssignments   RoomCandidateAssignment[]   // FIX: Added missing opposite relation array
+  formation       DoctoralFormation       @relation(fields: [formationId], references: [id])
+  specializations SessionSpecialization[]
+  subjects        Subject[]
+  gradingConfig   GradingConfig?
+  candidates      Candidate[]
+  importBatches   ImportBatch[]
+  sessionRooms    SessionRoom[]
+  sessionStaff    SessionStaff[]
+  candidateRoomAssignments   RoomCandidateAssignment[]
+  surveillantRoomAssignments RoomSurveillantAssignment[]
 
   @@map("competition_sessions")
 }
+
+// ─── SESSION SPECIALIZATION ───────────────────────────────────────────────────
+// Per-session instance of a formation specialization
+// Coordinator sets availableSlots per specialization per year
+
+model SessionSpecialization {
+  id                        String @id @default(uuid())
+  sessionId                 String
+  formationSpecializationId String
+  availableSlots            Int
+
+  session                CompetitionSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  formationSpecialization FormationSpecialization @relation(fields: [formationSpecializationId], references: [id])
+  candidates             Candidate[]
+  sessionRooms           SessionRoom[]
+
+  @@unique([sessionId, formationSpecializationId])
+  @@map("session_specializations")
+}
+
+// ─── SESSION STAFF ────────────────────────────────────────────────────────────
+// Assigns a user a function within a specific session
+// Creating this record flips user.role from NOT_ASSIGNED to the assigned function
+
+model SessionStaff {
+  id         String   @id @default(uuid())
+  sessionId  String
+  userId     String
+  function   Role     // FIX: non-nullable — a staff record must always have a function
+  assignedAt DateTime @default(now())
+  assignedBy String
+
+  session CompetitionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User               @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId, function])
+  @@map("session_staff")
+}
+
+// ─── SUBJECT ──────────────────────────────────────────────────────────────────
 
 model Subject {
   id           String  @id @default(uuid())
@@ -227,6 +221,8 @@ model Subject {
   @@map("subjects")
 }
 
+// ─── GRADING CONFIG ───────────────────────────────────────────────────────────
+
 model GradingConfig {
   id                   String   @id @default(uuid())
   sessionId            String   @unique
@@ -239,57 +235,60 @@ model GradingConfig {
   @@map("grading_configs")
 }
 
-// ─── CANDIDATES ───────────────────────────────
+// ─── CANDIDATE ────────────────────────────────────────────────────────────────
 
 model Candidate {
   id                 String          @id @default(uuid())
   sessionId          String
+  specializationId   String?         // matched on import from degreeSpeciality field
+
   registrationNumber String
 
-  // ── French name (required) ─────────────────────────────────────────────────
-  firstName          String
-  lastName           String
+  // French name (required)
+  firstName String
+  lastName  String
 
-  // ── Arabic name (from PROGRES) ─────────────────────────────────────────────
-  firstNameAr        String?
-  lastNameAr         String?
+  // Arabic name (from PROGRES)
+  firstNameAr String?
+  lastNameAr  String?
 
-  // ── Contact ────────────────────────────────────────────────────────────────
-  email              String?
-  phoneNumber        String?
-  address            String?         // Adresse de Résidence
+  // contact
+  email       String?
+  phoneNumber String?
+  address     String?
 
-  // ── Identity ───────────────────────────────────────────────────────────────
-  dateOfBirth        String?         // stored as string — PROGRES format varies
-  birthPlace         String?         // Lieu Naissance
-  nationalId         String?
+  // identity
+  dateOfBirth String?
+  birthPlace  String?
+  nationalId  String?
 
-  // ── Degree info ────────────────────────────────────────────────────────────
-  degreeInstitution  String?         // Etablissement (diplômé)
-  degreeSpeciality   String?         // Spécialité diplôme — replaces degreeTitle
-  fieldOfStudy       String?         // Filière (Informatique)
-  cursusType         String?         // LMD / CLASSIQUE BAC+5
-  graduationYear     Int?            // Année de diplôme
+  // degree info
+  degreeInstitution String?
+  degreeSpeciality  String? // raw value from CSV — used for specialization matching
+  fieldOfStudy      String?
+  cursusType        String? // LMD / CLASSIQUE BAC+5
+  graduationYear    Int?
 
-  // ── Tie-breaker fields (ministerial regulation — ranking) ──────────────────
-  masterClassCategory String?        // catégorie de classement Master
-  masterAverage       Float?         // moyenne de classement Master (tie-breaker 2)
-  bachelorAverage     Float?         // moyenne avant-dernière année (tie-breaker 3)
+  // tie-breaker fields (ranking — ministerial regulation)
+  masterClassCategory String?
+  masterAverage       Float?  // tie-breaker 2
+  bachelorAverage     Float?  // tie-breaker 3
 
-  // ── System fields ──────────────────────────────────────────────────────────
-  status             CandidateStatus @default(REGISTERED)
-  importBatchId      String?
-  importedAt         DateTime        @default(now())
+  // system
+  status        CandidateStatus @default(REGISTERED)
+  importBatchId String?
+  importedAt    DateTime        @default(now())
 
+  session        CompetitionSession     @relation(fields: [sessionId], references: [id])
+  specialization SessionSpecialization? @relation(fields: [specializationId], references: [id])
+  importBatch    ImportBatch?           @relation(fields: [importBatchId], references: [id])
   roomAssignment RoomCandidateAssignment?
-
-  session     CompetitionSession @relation(fields: [sessionId], references: [id])
-  importBatch ImportBatch?       @relation(fields: [importBatchId], references: [id])
 
   @@unique([sessionId, registrationNumber])
   @@map("candidates")
 }
 
+// ─── IMPORT BATCH ─────────────────────────────────────────────────────────────
 
 model ImportBatch {
   id               String       @id @default(uuid())
@@ -310,7 +309,8 @@ model ImportBatch {
   @@map("import_batches")
 }
 
-// ─── EXAM ROOMS ───────────────────────────────
+// ─── ROOM ─────────────────────────────────────────────────────────────────────
+// Global rooms — created once by admin, reused across sessions
 
 model Room {
   id        String   @id @default(uuid())
@@ -318,53 +318,64 @@ model Room {
   capacity  Int
   building  String?
   floor     String?
-  createdAt DateTime @default(now())
   isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
   createdBy String
 
-  sessionRooms SessionRoom[] // FIX: Updated to PascalCase reference
+  sessionRooms SessionRoom[]
 
   @@map("exam_rooms")
 }
 
-// FIX: Renamed from sessionRoom to SessionRoom (PascalCase)
+// ─── SESSION ROOM ─────────────────────────────────────────────────────────────
+// Links a global room to a session + specialization
+// A room can only appear once per session (one specialization per room)
+
 model SessionRoom {
-  id           String    @id @default(uuid())
-  sessionId    String
-  roomId       String
-  usedCapacity Int       @default(0)
-  lockedAt     DateTime? // FIX: changed lockedat to lockedAt
-  lockedBy     String?
+  id               String    @id @default(uuid())
+  sessionId        String
+  roomId           String
+  specializationId String    // which specialization's candidates sit here
+  usedCapacity     Int       @default(0)
+  lockedAt         DateTime?
+  lockedBy         String?
 
-  session                CompetitionSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  candidateAssignments   RoomCandidateAssignment[]   // FIX: typo condidateAssignments to candidateAssignments
+  session        CompetitionSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  room           Room                  @relation(fields: [roomId], references: [id])
+  specialization SessionSpecialization @relation(fields: [specializationId], references: [id])
+
+  candidateAssignments   RoomCandidateAssignment[]
   surveillantAssignments RoomSurveillantAssignment[]
-  room                   Room                        @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
+  // FIX: room appears only once per session — not per specialization
   @@unique([sessionId, roomId])
   @@map("session_rooms")
 }
 
+// ─── ROOM CANDIDATE ASSIGNMENT ────────────────────────────────────────────────
+
 model RoomCandidateAssignment {
   id            String @id @default(uuid())
   sessionRoomId String
-  candidateId   String @unique
-  sessionId     String
+  candidateId   String @unique // one candidate → one room only
+  sessionId     String          // FIX: added for efficient querying and deleteMany
 
-  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade) // FIX: Updated reference
+  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade)
   candidate   Candidate          @relation(fields: [candidateId], references: [id])
   session     CompetitionSession @relation(fields: [sessionId], references: [id])
 
   @@map("room_candidate_assignments")
 }
 
+// ─── ROOM SURVEILLANT ASSIGNMENT ──────────────────────────────────────────────
+
 model RoomSurveillantAssignment {
   id            String @id @default(uuid())
   sessionRoomId String
   userId        String
-  sessionId     String
+  sessionId     String // FIX: added for efficient querying
 
-  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade) // FIX: Updated reference
+  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade)
   user        User               @relation(fields: [userId], references: [id])
   session     CompetitionSession @relation(fields: [sessionId], references: [id])
 
