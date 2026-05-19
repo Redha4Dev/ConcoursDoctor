@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, use } from "react";
 import * as SecureStore from "expo-secure-store";
 import { useRootNavigationState, useRouter, useSegments } from "expo-router";
 import api from "../utils/axios";
@@ -7,6 +7,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children } : any) {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -34,6 +35,7 @@ const login = async (email, password) => {
     await SecureStore.setItemAsync("user", JSON.stringify(user));
 
     setUser(user);
+    setToken(token);
   } else {
     throw new Error("Invalid response from server");
   }
@@ -66,7 +68,7 @@ const login = async (email, password) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login,  logout }}>
+    <AuthContext.Provider value={{ user, loading, login,  logout, token }}>
       {children}
     </AuthContext.Provider>
   );

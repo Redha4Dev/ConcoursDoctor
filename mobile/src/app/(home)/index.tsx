@@ -1,9 +1,10 @@
 import { View, Text, TouchableOpacity } from "react-native";
 import React from "react";
 import { useAuth } from "../../../providers/AuthProvider"; 
+import { Link } from "expo-router";
 
 const Welcome = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
 
   return (
     <View className="flex-1 bg-[#F5F6FA] items-center justify-center px-6">
@@ -41,6 +42,14 @@ const Welcome = () => {
           </Text>
         </TouchableOpacity>
 
+      </View>
+
+      <View>
+        <Link href={`/(home)/change-password`}>
+        <Text className="text-gray-600 text-sm mt-4">
+          change Password
+        </Text>
+        </Link>
       </View>
 
     </View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Text,
   View,
@@ -10,15 +10,15 @@ import {
   Alert,
   ActivityIndicator,
   I18nManager,
+  Platform,
+  DevSettings,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Checkbox from "expo-checkbox";
 import { useAuth } from "../../../providers/AuthProvider";
 import { i18n } from "../../../locales/i18n";
-import { Platform } from "react-native";
 import * as Updates from "expo-updates";
-import { DevSettings } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function LoginScreen() {
@@ -40,7 +40,7 @@ export default function LoginScreen() {
   };
 
   // Load saved language on mount
-  const handleChangeLanguage = async (newLang: string) => {
+  const handleChangeLanguage = async (newLang) => {
     const isRTL = newLang === "ar";
 
     await AsyncStorage.setItem("APP_LANGUAGE", newLang);
@@ -51,6 +51,7 @@ export default function LoginScreen() {
 
     await reloadApp();
   };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter both email and password.");
@@ -61,7 +62,7 @@ export default function LoginScreen() {
     try {
       //@ts-ignore
       await login(email, password);
-    } catch (error: any) {
+    } catch (error) {
       Alert.alert("Login Failed", error.message || "Invalid credentials.");
     } finally {
       setIsSubmitting(false);
@@ -69,168 +70,169 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F5F6FA]">
+    <SafeAreaView className="flex-1 bg-[#F8F9FA]">
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1"
       >
         <ScrollView
-          contentContainerClassName="flex-grow px-6 justify-center py-6"
+          contentContainerClassName="flex-grow px-6 justify-center py-10"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header & Logo */}
-          <View className="items-center mb-8 mt-4">
-            <Image
-              source={require("@/assets/images/Logo.png")}
-              className="w-[240px] h-[60px] mb-2"
-              resizeMode="contain"
-            />
-            <Text className="text-[#6B7280] text-[13px] font-medium">
-              {i18n.t("Supervisor Secure Access Portal")} 
-            </Text>
-          </View>
-
-          {/* Form Container */}
-          <View className="w-full">
-            {/* Username/Email Input */}
-            <Text className="text-[14px] font-semibold text-[#111827] mb-2">
-              {i18n.t("username or email")}
-            </Text>
-            <View className="flex-row items-center bg-white border border-[#E5E7EB] rounded-lg mb-4 h-[50px] px-3">
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color="#6B7280"
-                className="mr-2"
-              />
-              <TextInput
-                className="flex-1 h-full text-[#111827] text-[15px]"
-                placeholder="Enter your credentials"
-                placeholderTextColor="#9CA3AF"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-                editable={!isSubmitting}
+          {/* Main White Card */}
+          <View
+            className="bg-white rounded-[20px] p-6 w-full mb-10"
+            style={{
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.05,
+              shadowRadius: 15,
+              elevation: 4,
+            }}
+          >
+            {/* Header & Logo */}
+            <View className="items-center border-b border-[#F3F4F6] pb-6 mb-6">
+              <Image
+                source={require("@/assets/images/Logo.png")}
+                className="w-[240px] h-[60px]"
+                resizeMode="contain"
               />
             </View>
 
-            {/* Password Input */}
-            <Text className="text-[14px] font-semibold text-[#111827] mb-2">
-              {i18n.t("password")}
-            </Text>
-            <View className="flex-row items-center bg-white border border-[#E5E7EB] rounded-lg mb-4 h-[50px] px-3">
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color="#6B7280"
-                className="mr-2"
-              />
-              <TextInput
-                className="flex-1 h-full text-[#111827] text-[15px]"
-                placeholder="••••••••"
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry={!passwordVisible}
-                autoCapitalize="none"
-                value={password}
-                onChangeText={setPassword}
-                editable={!isSubmitting}
-              />
-              <TouchableOpacity
-                onPress={() => setPasswordVisible(!passwordVisible)}
-                className="p-1"
-              >
-                <Ionicons
-                  name={passwordVisible ? "eye-outline" : "eye-off-outline"}
-                  size={20}
-                  color="#6B7280"
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Options Row */}
-            <View className="flex-row justify-between items-center mb-6">
-              <TouchableOpacity
-                className="flex-row items-center"
-                onPress={() => setRememberMe(!rememberMe)}
-                disabled={isSubmitting}
-                activeOpacity={0.7}
-              >
-                <Checkbox
-                  className="w-[18px] h-[18px] rounded border-[#D1D5DB]"
-                  value={rememberMe}
-                  onValueChange={setRememberMe}
-                  color={rememberMe ? "#3B1BBF" : undefined}
-                />
-                <Text className="ml-2 text-[14px] text-[#6B7280]">
-                  {i18n.t("remember me")}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity disabled={isSubmitting}>
-                <Text className="text-[#3B1BBF] text-[14px] font-semibold">
-                  {i18n.t("forgot password?")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Login Button */}
-            <TouchableOpacity
-              className={`rounded-lg h-[50px] justify-center items-center mb-8 ${isSubmitting ? "bg-indigo-400" : "bg-[#3B1BBF]"}`}
-              activeOpacity={0.8}
-              onPress={handleLogin}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text className="text-white text-[16px] font-semibold">
-                  {i18n.t("Log In")}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View className="flex-row gap-3">
-            <TouchableOpacity onPress={() => handleChangeLanguage("en")}>
-              <Text>EN</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => handleChangeLanguage("ar")}>
-              <Text>AR</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Footer */}
-          <View className="items-center mt-auto">
-            <View className="flex-row items-center mb-4">
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={14}
-                color="#6B7280"
-              />
-              <Text className="text-[#6B7280] text-[12px] font-semibold tracking-wider ml-1.5">
-                {i18n.t("ENCRYPTED SESSION")} 
+            {/* Form Container */}
+            <View className="w-full">
+              {/* Username/Email Input */}
+              <Text className="text-[14px] font-bold text-[#4B5563] mb-2">
+                {i18n.t("Email")}
               </Text>
+              <View className="flex-row items-center bg-white border border-[#E5E7EB] rounded-xl mb-5 h-[50px] px-4">
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color="#9CA3AF"
+                  className="mr-3"
+                />
+                <TextInput
+                  className="flex-1 h-full text-[#111827] text-[15px]"
+                  placeholder="Enter your credentials"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                  editable={!isSubmitting}
+                />
+              </View>
+
+              {/* Password Input */}
+              <Text className="text-[14px] font-bold text-[#4B5563] mb-2">
+                {i18n.t("Password")}
+              </Text>
+              <View className="flex-row items-center bg-white border border-[#E5E7EB] rounded-xl mb-5 h-[50px] px-4">
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color="#9CA3AF"
+                  className="mr-3"
+                />
+                <TextInput
+                  className="flex-1 h-full text-[#111827] text-[15px]"
+                  placeholder="••••••••"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!passwordVisible}
+                  autoCapitalize="none"
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!isSubmitting}
+                />
+                <TouchableOpacity
+                  onPress={() => setPasswordVisible(!passwordVisible)}
+                  className="p-1 ml-2"
+                >
+                  <Ionicons
+                    name={passwordVisible ? "eye-outline" : "eye-off-outline"}
+                    size={18}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Options Row */}
+              <View className="flex-row justify-between items-center mb-8">
+                <TouchableOpacity
+                  className="flex-row items-center"
+                  onPress={() => setRememberMe(!rememberMe)}
+                  disabled={isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <Checkbox
+                    className="w-[18px] h-[18px] rounded-[4px] border-[#D1D5DB]"
+                    value={rememberMe}
+                    onValueChange={setRememberMe}
+                    color={rememberMe ? "#311B92" : undefined}
+                  />
+                  <Text className="ml-2 text-[14px] text-[#6B7280]">
+                    {i18n.t("Remember me")}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity disabled={isSubmitting}>
+                  <Text className="text-[#311B92] text-[14px] font-bold">
+                    {i18n.t("Forgot Password?")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Login Button */}
+              <TouchableOpacity
+                className={`rounded-[14px] h-[52px] justify-center items-center ${
+                  isSubmitting ? "bg-indigo-400" : "bg-[#311B92]"
+                }`}
+                activeOpacity={0.8}
+                onPress={handleLogin}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text className="text-white text-[16px] font-bold">
+                    {i18n.t("Log In")}
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
-            <Text className="text-[#9CA3AF] text-[12px] mb-2">
+          </View>
+
+          {/* Footer (Outside the Card) */}
+          <View className="items-center mt-auto pb-4">
+            <Text className="text-[#9CA3AF] text-[13px] mb-3">
               © 2026 Esi-SBA. All rights reserved.
             </Text>
-            <View className="flex-row items-center">
+            <View className="flex-row items-center space-x-6">
               <TouchableOpacity>
-                <Text className="text-[#9CA3AF] text-[12px]">
-                  {i18n.t("Privacy Policy")} 
+                <Text className="text-[#9CA3AF] text-[13px]">
+                  {i18n.t("Privacy Policy")}
                 </Text>
               </TouchableOpacity>
-              <Text className="text-[#9CA3AF] text-[12px] mx-1.5">|</Text>
               <TouchableOpacity>
-                <Text className="text-[#9CA3AF] text-[12px]">
+                <Text className="text-[#9CA3AF] text-[13px]">
                   {i18n.t("Terms of Service")}
                 </Text>
               </TouchableOpacity>
-              <Text className="text-[#9CA3AF] text-[12px] mx-1.5">|</Text>
               <TouchableOpacity>
-                <Text className="text-[#9CA3AF] text-[12px]">{i18n.t("Support")} </Text>
+                <Text className="text-[#9CA3AF] text-[13px]">
+                  {i18n.t("Support")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Functional Language Toggles (Kept discrete to not disrupt UI) */}
+            <View className="flex-row gap-4 mt-6 opacity-30">
+              <TouchableOpacity onPress={() => handleChangeLanguage("en")}>
+                <Text className="text-xs">EN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleChangeLanguage("ar")}>
+                <Text className="text-xs">AR</Text>
               </TouchableOpacity>
             </View>
           </View>
