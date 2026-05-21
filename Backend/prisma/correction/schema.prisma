@@ -1,15 +1,69 @@
+
+
 // prisma/correction/schema.prisma
+
 generator client {
   provider = "prisma-client"
-  output   = "../../src/generated/correction" // Changed this line
+  output   = "../../src/generated/correction"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-model Correction {
-  id        String   @id @default(uuid())
-  content   String
-  createdAt DateTime @default(now())
+enum CopyStatus {
+  PENDING         // not yet corrected
+  FIRST_DONE      // one corrector submitted
+  SECOND_DONE     // both correctors submitted — discrepancy check pending
+  DISCREPANCY     // gap > threshold — needs third corrector
+  THIRD_DONE      // third corrector submitted
+  VALIDATED       // final grade computed
+}
+
+enum ResolutionRule {
+  MEAN_TWO        // no discrepancy — mean of corrector 1 and 2
+  MEAN_CLOSEST    // discrepancy — mean of third + closest of the two
+}
+
+model ExamCopy {
+  id            String     @id @default(uuid())
+  sessionId     String     // reference to identity DB session
+  subjectId     String     // reference to identity DB subject
+  qrCode        String     @unique  // printed on paper — "copy-042"
+  candidateId   String?    // set during attendance — cleared after anonymization
+  anonymousCode String?    // DOCT-YYYY-XXXX — set during anonymization
+  status        CopyStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+
+  grades     CorrectionGrade[]
+  finalGrade FinalGrade?
+
+  @@map("exam_copies")
+}
+
+model CorrectionGrade {
+  id          String   @id @default(uuid())
+  copyId      String
+  correctorId String   // user ID from identity DB
+  grade       Float
+  round       Int      // 1 = first, 2 = second, 3 = third
+  submittedAt DateTime @default(now())
+  note        String?
+
+  copy ExamCopy @relation(fields: [copyId], references: [id])
+
+  @@unique([copyId, correctorId, round])
+  @@map("correction_grades")
+}
+
+model FinalGrade {
+  id           String         @id @default(uuid())
+  copyId       String         @unique
+  finalGrade   Float
+  appliedRule  ResolutionRule
+  computedAt   DateTime       @default(now())
+
+  copy ExamCopy @relation(fields: [copyId], references: [id])
+
+  @@map("final_grades")
 }
