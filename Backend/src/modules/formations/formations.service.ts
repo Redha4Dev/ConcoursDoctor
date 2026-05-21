@@ -25,7 +25,7 @@ export const createFormation = async (
   if (!coordinator) throw new AppError("User not found", 404);
   if (!coordinator.isActive) throw new AppError("User is inactive", 400);
 
-  // use a transaction — formation creation and role flip are atomic
+  // use a transaction so formation creation and coordinator promotion are atomic
   return identityDb.$transaction(async (tx) => {
     const formation = await tx.doctoralFormation.create({
       data: {
@@ -43,9 +43,9 @@ export const createFormation = async (
       },
     });
 
-    // flip user role to COORDINATOR if they were NOT_ASSIGNED
-    // don't downgrade if they're already something higher
-    if (coordinator.role === "NOT_ASSIGNED") {
+    // Promote a regular staff account to global COORDINATOR when they become
+    // responsible for a doctoral formation. Session duties remain separate.
+    if (coordinator.role === "STAFF") {
       await tx.user.update({
         where: { id: dto.coordinatorId },
         data: { role: "COORDINATOR" },

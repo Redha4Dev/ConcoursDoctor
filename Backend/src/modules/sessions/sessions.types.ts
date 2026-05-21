@@ -30,13 +30,7 @@ export const UpdateSessionSpecializationSchema = z.object({
 // Session staff
 export const AssignStaffSchema = z.object({
   userId: z.string().uuid("Invalid user ID"),
-  function: z.enum([
-    "COORDINATOR",
-    "CORRECTOR",
-    "JURY_MEMBER",
-    "SURVEILLANT",
-    "AUDITOR",
-  ]),
+  function: z.enum(["CORRECTOR", "JURY_MEMBER", "SURVEILLANT", "AUDITOR"]),
 });
 
 export const CreateSubjectSchema = z.object({

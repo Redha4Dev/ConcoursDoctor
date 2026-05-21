@@ -2,13 +2,13 @@ import bcrypt from "bcrypt";
 import { identityDb } from "../../config/db.js";
 import { signToken } from "../../utils/jwt.js";
 import { AppError } from "../../utils/AppError.js";
-import type { LoginDTO, ChangePasswordDTO } from "./auth.types.js";
+import type { LoginDto, ChangePasswordDto } from "./auth.types.js";
 import crypto from "crypto";
 import { sendEmail } from "../../utils/mailer.js";
 import { resetPasswordTemplate } from "../../utils/emailTemplates.js";
 import type { ForgotPasswordDto, ResetPasswordDto } from "./auth.types.js";
 
-export const loginUser = async (dto: LoginDTO) => {
+export const loginUser = async (dto: LoginDto) => {
   const user = await identityDb.user.findUnique({
     where: { email: dto.email },
   });
@@ -69,7 +69,7 @@ export const getMe = async (userId: string) => {
 
 export const changeUserPassword = async (
   userId: string,
-  dto: ChangePasswordDTO,
+  dto: ChangePasswordDto,
 ) => {
   const user = await identityDb.user.findUnique({
     where: { id: userId },

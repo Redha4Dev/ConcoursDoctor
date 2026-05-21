@@ -49,7 +49,7 @@ export const getMyAssignmentsController = asyncHandler(
 
 export const getRoomCandidatesController = asyncHandler(
   async (req: Request, res: Response) => {
-    const { id: userId } = getAuthenticatedUser(req);
+    const { id: userId, role } = getAuthenticatedUser(req);
     const sessionId = getRouteParam(req, "sessionId");
     const sessionRoomId = getRouteParam(req, "sessionRoomId");
 
@@ -63,6 +63,7 @@ export const getRoomCandidatesController = asyncHandler(
 
     const data = await getRoomCandidates(
       userId,
+      role,
       sessionId,
       sessionRoomId,
       queryResult.data.subjectId,
@@ -78,7 +79,7 @@ export const getRoomCandidatesController = asyncHandler(
 
 export const validateAttendanceController = asyncHandler(
   async (req: Request, res: Response) => {
-    const { id: userId } = getAuthenticatedUser(req);
+    const { id: userId, role } = getAuthenticatedUser(req);
     const sessionId = getRouteParam(req, "sessionId");
 
     const bodyResult = ValidateAttendanceBodySchema.safeParse(req.body);
@@ -89,7 +90,12 @@ export const validateAttendanceController = asyncHandler(
       );
     }
 
-    const data = await validateAttendance(userId, sessionId, bodyResult.data);
+    const data = await validateAttendance(
+      userId,
+      role,
+      sessionId,
+      bodyResult.data,
+    );
 
     void audit({
       userId,

@@ -49,16 +49,6 @@ export const protect = async (
       return next(new AppError("User not found or account is inactive", 401));
     }
 
-    // NOT_ASSIGNED users cannot access anything except auth routes
-    if (user.role === "NOT_ASSIGNED") {
-      return next(
-        new AppError(
-          "Account not yet assigned — contact your administrator",
-          403,
-        ),
-      );
-    }
-
     req.user = {
       id: user.id,
       email: user.email,

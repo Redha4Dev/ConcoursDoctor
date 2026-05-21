@@ -12,13 +12,15 @@ info:
     Login via `POST /api/v1/auth/login` to obtain the cookie.
 
     ## Roles
-    - **NOT_ASSIGNED** — Default role after account creation. Becomes a real role after first session staff assignment.
     - **ADMIN** — Full access. Creates all user accounts.
     - **COORDINATOR** — Manages sessions, assigns correctors, configures grading.
-    - **CORRECTOR** — Accesses and grades assigned anonymous copies.
-    - **JURY_MEMBER** — Reviews deliberation results, signs PV.
-    - **SURVEILLANT** — Records attendance during exam sessions.
-    - **AUDITOR** — Read-only access to audit logs and archived data.
+    - **STAFF** — Default professor account, assignable to session-specific duties.
+
+    ## Session Functions
+    - **CORRECTOR** — Grades assigned anonymous copies in a specific session.
+    - **JURY_MEMBER** — Reviews deliberation results for a specific session.
+    - **SURVEILLANT** — Records attendance during a specific session.
+    - **AUDITOR** — Read-only session audit function.
 
     ## Change Log
     - **2026-05-01** — Full sync pass against implementation.
@@ -111,10 +113,12 @@ components:
 
     # ── Enums ─────────────────────────────────────────────────────────────────
     Role:
-      # MODIFIED 2026-05-01: Added NOT_ASSIGNED — default role after user creation,
-      # before first session staff assignment flips it to a functional role.
       type: string
-      enum: [NOT_ASSIGNED, ADMIN, COORDINATOR, SURVEILLANT, CORRECTOR, JURY_MEMBER, AUDITOR]
+      enum: [ADMIN, COORDINATOR, STAFF]
+
+    SessionFunction:
+      type: string
+      enum: [CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
 
     SessionStatus:
       type: string
@@ -188,8 +192,7 @@ components:
             type: object
             properties:
               function:
-                type: string
-                enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+                $ref: "#/components/schemas/SessionFunction"
               session:
                 type: object
                 properties:
@@ -234,8 +237,7 @@ components:
                     type: string
                     format: uuid
                   function:
-                    type: string
-                    enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+                    $ref: "#/components/schemas/SessionFunction"
                   assignedAt:
                     type: string
                     format: date-time
@@ -264,7 +266,7 @@ components:
     # from the Prisma schema. Profile data is now stored as flat columns on User.
 
     # MODIFIED 2026-05-01: CreateUserBody — role is NO LONGER accepted at creation time.
-    # Users are created with role=NOT_ASSIGNED. Role is set when assigned to a session
+    # Users are created with role=STAFF. Session duties are assigned separately
     # via POST /sessions/{id}/staff. Removed: role, department, academicRank, scope.
     # Added: phoneNumber, institution, academicGrade, specialization (optional, role-agnostic).
     CreateUserBody:
@@ -415,8 +417,7 @@ components:
                         type: integer
 
     # MODIFIED 2026-05-01: CreateFormationBody now requires coordinatorId.
-    # The assigned user becomes the formation coordinator (role flipped to COORDINATOR
-    # if they were NOT_ASSIGNED).
+    # A STAFF coordinator account is promoted to global COORDINATOR.
     CreateFormationBody:
       type: object
       required: [name, code, department, coordinatorId]
@@ -576,8 +577,7 @@ components:
           type: string
           format: uuid
         function:
-          type: string
-          enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+          $ref: "#/components/schemas/SessionFunction"
         assignedAt:
           type: string
           format: date-time
@@ -613,8 +613,7 @@ components:
           type: string
           format: uuid
         function:
-          type: string
-          enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+          $ref: "#/components/schemas/SessionFunction"
 
     # MODIFIED 2026-05-01: SessionSummary — removed availableSlots (moved to
     # SessionSpecialization). Added specializations array.
@@ -1808,8 +1807,8 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/Role"
-          description: Filter by role
-          example: CORRECTOR
+          description: Filter by global role
+          example: STAFF
         - name: page
           in: query
           schema:
@@ -1847,10 +1846,10 @@ paths:
     post:
       summary: Create user
       description: |
-        Create a new user account (role defaults to NOT_ASSIGNED).
+        Create a new user account (role defaults to STAFF).
         A temporary 16-char hex password is generated and sent by email.
         The user must change the password on first login (mustChangePassword=true).
-        Role is assigned later via POST /sessions/{id}/staff.
+        Session duties are assigned later via POST /sessions/{id}/staff.
         Admin only.
       tags: [Users]
       requestBody:
@@ -2672,7 +2671,7 @@ paths:
       summary: Assign staff to session
       description: |
         Assign a user to a session with a specific function (CORRECTOR, JURY_MEMBER, etc.).
-        If the user was NOT_ASSIGNED, their role is automatically upgraded to match the function.
+        This does not mutate the user's global role.
         Session must be in DRAFT status. User must be active.
         Admin or Coordinator only.
       tags: [Sessions]
@@ -2741,8 +2740,7 @@ paths:
           in: path
           required: true
           schema:
-            type: string
-            enum: [COORDINATOR, CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+            $ref: "#/components/schemas/SessionFunction"
       responses:
         "200":
           description: Staff removed successfully
@@ -3452,7 +3450,7 @@ paths:
       summary: Assign surveillant to room
       description: |
         Assign a SURVEILLANT to a session room.
-        The user must be an active SURVEILLANT registered to this session's formation via FormationStaff.
+        The user must have the SURVEILLANT function in SessionStaff for this session.
         Cannot assign to a locked room.
         Session must be DRAFT or OPEN.
         Returns a warning if the room has fewer than 2 surveillants after assignment.

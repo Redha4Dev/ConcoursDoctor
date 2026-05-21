@@ -9,14 +9,19 @@ datasource db {
 
 // ─── ENUMS ────────────────────────────────────────────────────────────────────
 
+// Global Account Roles (The base account level)
 enum Role {
   ADMIN
   COORDINATOR
+  STAFF
+}
+
+// Contextual Session Functions (The role they play in a specific match/session)
+enum SessionFunction {
   SURVEILLANT
   CORRECTOR
   JURY_MEMBER
   AUDITOR
-  NOT_ASSIGNED // default — user exists but has no function yet
 }
 
 enum SessionStatus {
@@ -51,7 +56,7 @@ model User {
   lastName             String
   email                String    @unique
   passwordHash         String
-  role                 Role      @default(NOT_ASSIGNED)
+  role                 Role      @default(STAFF)
   isActive             Boolean   @default(true)
   mustChangePassword   Boolean   @default(true)
   lastLogin            DateTime?
@@ -110,7 +115,7 @@ model DoctoralFormation {
   createdAt   DateTime @default(now())
   createdBy   String
 
-  // coordinator fixed at formation creation — role flips to COORDINATOR
+  // coordinator fixed at formation creation
   coordinatorId String
   coordinator   User   @relation(fields: [coordinatorId], references: [id])
 
@@ -189,14 +194,13 @@ model SessionSpecialization {
 }
 
 // ─── SESSION STAFF ────────────────────────────────────────────────────────────
-// Assigns a user a function within a specific session
-// Creating this record flips user.role from NOT_ASSIGNED to the assigned function
+// Assigns a user a contextual function within a specific session.
 
 model SessionStaff {
   id         String   @id @default(uuid())
   sessionId  String
   userId     String
-  function   Role     // FIX: non-nullable — a staff record must always have a function
+  function   SessionFunction // non-nullable: a staff record must always have a function
   assignedAt DateTime @default(now())
   assignedBy String
 
@@ -218,10 +222,10 @@ model Subject {
   minimumGrade Float   @default(10)
   description  String?
 
+  attendanceRecords AttendanceRecord[]
   session CompetitionSession @relation(fields: [sessionId], references: [id])
 
   @@map("subjects")
-  attendanceRecords AttendanceRecord[]
 }
 
 // ─── GRADING CONFIG ───────────────────────────────────────────────────────────
@@ -286,7 +290,7 @@ model Candidate {
   specialization SessionSpecialization? @relation(fields: [specializationId], references: [id])
   importBatch    ImportBatch?           @relation(fields: [importBatchId], references: [id])
   roomAssignment RoomCandidateAssignment?
-  attendanceRecord AttendanceRecord[]
+  attendanceRecords AttendanceRecord[]
 
   @@unique([sessionId, registrationNumber])
   @@map("candidates")

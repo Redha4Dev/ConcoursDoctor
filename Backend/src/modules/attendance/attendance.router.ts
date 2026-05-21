@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { protect } from "../../middleware/authMiddleware.js";
 import { restrictTo } from "../../middleware/rbac.middleware.js";
+import { restrictToSessionFunction } from "../../middleware/rbacSession.js";
 import {
   getMyAssignmentsController,
   getRoomCandidatesController,
@@ -24,7 +25,7 @@ router.use(protect);
  */
 router.get(
   "/my-assignments",
-  restrictTo("SURVEILLANT"),
+  restrictTo("STAFF", "ADMIN", "COORDINATOR"),
   getMyAssignmentsController,
 );
 
@@ -35,7 +36,7 @@ router.get(
  */
 router.get(
   "/:sessionId/room/:sessionRoomId/candidates",
-  restrictTo("SURVEILLANT"),
+  restrictToSessionFunction("SURVEILLANT"),
   getRoomCandidatesController,
 );
 
@@ -46,7 +47,7 @@ router.get(
  */
 router.post(
   "/:sessionId/validate",
-  restrictTo("SURVEILLANT"),
+  restrictToSessionFunction("SURVEILLANT"),
   validateAttendanceController,
 );
 
