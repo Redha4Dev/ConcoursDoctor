@@ -41,7 +41,7 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
       lastName: dto.lastName,
       email: dto.email,
       passwordHash,
-      role: "STAFF",
+      role: dto.role ?? "STAFF", // default role
       createdBy,
       mustChangePassword: true,
       phoneNumber: dto.phoneNumber ?? null,
