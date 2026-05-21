@@ -219,9 +219,9 @@ model Subject {
   description  String?
 
   session CompetitionSession @relation(fields: [sessionId], references: [id])
-  attendanceRecords AttendanceRecord[]
 
   @@map("subjects")
+  attendanceRecords AttendanceRecord[]
 }
 
 // ─── GRADING CONFIG ───────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ model Candidate {
   specialization SessionSpecialization? @relation(fields: [specializationId], references: [id])
   importBatch    ImportBatch?           @relation(fields: [importBatchId], references: [id])
   roomAssignment RoomCandidateAssignment?
-  attendanceRecords AttendanceRecord[]
+  attendanceRecord AttendanceRecord[]
 
   @@unique([sessionId, registrationNumber])
   @@map("candidates")
@@ -392,7 +392,7 @@ model RoomSurveillantAssignment {
 model AttendanceRecord {
   id            String           @id @default(uuid())
   sessionId     String
-  candidateId   String
+  candidateId   String           
   sessionRoomId String
   subjectId      String           // NEW: Which subject is this for?
   anonymityCode  String?          @unique // NEW: "copy-002". Unique prevents giving the same copy twice!
@@ -404,11 +404,13 @@ model AttendanceRecord {
   session     CompetitionSession @relation(fields: [sessionId], references: [id])
   candidate   Candidate          @relation(fields: [candidateId], references: [id])
   sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id])
-  subject     Subject            @relation(fields: [subjectId], references: [id])
   recorder    User               @relation(fields: [recordedBy], references: [id])
+  subject        Subject          @relation(fields: [subjectId], references: [id])
+  
+  // FIX: A candidate can only have one copy/attendance per subject
+  @@unique([candidateId, subjectId]) 
+  
 
-  @@unique([candidateId, subjectId])
-  @@index([sessionRoomId, subjectId])
   @@map("attendance_records")
 }
 
