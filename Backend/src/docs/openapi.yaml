@@ -50,6 +50,8 @@ tags:
     description: Candidate import, listing, and management
   - name: Rooms
     description: Room management and session room assignments
+  - name: Attendance
+    description: Attendance scanning, room candidate views, summaries, and locking
 
 # ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
 components:
@@ -1267,6 +1269,242 @@ components:
           type: integer
         invalid:
           type: integer
+
+    # --- Attendance -----------------------------------------------------------
+    AttendanceAssignment:
+      type: object
+      properties:
+        assignmentId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        sessionLabel:
+          type: string
+          example: Concours Doctorat IA 2026
+        examDate:
+          type: string
+          format: date-time
+        sessionStatus:
+          $ref: "#/components/schemas/SessionStatus"
+        sessionRoomId:
+          type: string
+          format: uuid
+        room:
+          type: object
+          properties:
+            name:
+              type: string
+              example: Amphi A
+            floor:
+              type: string
+              nullable: true
+              example: RDC
+            building:
+              type: string
+              nullable: true
+              example: Batiment Principal
+        candidateCount:
+          type: integer
+          example: 42
+
+    MyAttendanceAssignments:
+      type: object
+      properties:
+        upcoming:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceAssignment"
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceAssignment"
+        past:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceAssignment"
+
+    AttendanceSubjectState:
+      type: object
+      properties:
+        subjectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Bases de Donnees Avancees
+        attended:
+          type: boolean
+          nullable: true
+          description: null means attendance has not been validated yet for this subject in this room.
+        anonymityCode:
+          type: string
+          nullable: true
+          example: copy-002
+
+    AttendanceRoomCandidate:
+      type: object
+      properties:
+        candidateId:
+          type: string
+          format: uuid
+        registrationNumber:
+          type: string
+          example: "2026001"
+        firstName:
+          type: string
+          example: Ahmed
+        lastName:
+          type: string
+          example: Benali
+        specializationName:
+          type: string
+          nullable: true
+          example: Intelligence Artificielle
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceSubjectState"
+
+    AttendanceScanItem:
+      type: object
+      required: [candidateId, qrCode]
+      properties:
+        candidateId:
+          type: string
+          format: uuid
+        qrCode:
+          type: string
+          minLength: 1
+          example: copy-002
+
+    ValidateAttendanceBody:
+      type: object
+      required: [sessionRoomId, subjectId, scans]
+      properties:
+        sessionRoomId:
+          type: string
+          format: uuid
+        subjectId:
+          type: string
+          format: uuid
+        scans:
+          type: array
+          description: Candidates who received a paper. Candidates assigned to the room but missing from this array are marked ABSENT.
+          items:
+            $ref: "#/components/schemas/AttendanceScanItem"
+
+    ValidateAttendanceResult:
+      type: object
+      properties:
+        validated:
+          type: integer
+          example: 42
+        present:
+          type: integer
+          example: 39
+        absent:
+          type: integer
+          example: 3
+        subjectName:
+          type: string
+          example: Bases de Donnees Avancees
+
+    AttendanceSubjectSummary:
+      type: object
+      properties:
+        subjectId:
+          type: string
+          format: uuid
+        subjectName:
+          type: string
+          example: Bases de Donnees Avancees
+        validated:
+          type: boolean
+          example: true
+        present:
+          type: integer
+          example: 39
+        absent:
+          type: integer
+          example: 3
+        total:
+          type: integer
+          example: 42
+
+    AttendanceRoomSummary:
+      type: object
+      properties:
+        sessionRoomId:
+          type: string
+          format: uuid
+        roomName:
+          type: string
+          example: Amphi A
+        totalCandidates:
+          type: integer
+          example: 42
+        validatedSubjects:
+          type: integer
+          example: 2
+        pendingSubjects:
+          type: integer
+          example: 0
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceSubjectSummary"
+
+    AttendanceSessionSummary:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        sessionLabel:
+          type: string
+          example: Concours Doctorat IA 2026
+        sessionStatus:
+          $ref: "#/components/schemas/SessionStatus"
+        readyToLock:
+          type: boolean
+          description: true only when every room has candidates, every registered candidate is assigned, and every room-subject attendance set is complete.
+        totalRooms:
+          type: integer
+          example: 3
+        totalSubjects:
+          type: integer
+          example: 2
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRoomSummary"
+
+    LockAttendanceBody:
+      type: object
+      required: [confirm]
+      properties:
+        confirm:
+          type: boolean
+          const: true
+          example: true
+
+    LockAttendanceResult:
+      type: object
+      properties:
+        locked:
+          type: boolean
+          example: true
+        present:
+          type: integer
+          example: 39
+        absent:
+          type: integer
+          example: 3
+        total:
+          type: integer
+          example: 42
 
 # ─── SECURITY DEFAULT ─────────────────────────────────────────────────────────
 security:
@@ -3364,7 +3602,213 @@ paths:
         "404":
           description: Session or SessionRoom not found
 
-  # ══ CANDIDATES ══════════════════════════════════════════════════════════════
+  # == ATTENDANCE ===============================================================
+  /api/v1/attendance/my-assignments:
+    get:
+      summary: List my attendance assignments
+      description: |
+        Returns all session rooms assigned to the authenticated SURVEILLANT,
+        grouped into upcoming, active, and past buckets.
+      tags: [Attendance]
+      responses:
+        "200":
+          description: Assignments retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/MyAttendanceAssignments"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden - Surveillant only
+
+  /api/v1/attendance/{sessionId}/room/{sessionRoomId}/candidates:
+    get:
+      summary: List room candidates with attendance state
+      description: |
+        Returns every candidate assigned to the surveillant's room and their
+        per-subject attendance state. If subjectId is provided, only that
+        subject is returned.
+      tags: [Attendance]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionRoomId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: subjectId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidates retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AttendanceRoomCandidate"
+        "400":
+          description: Invalid query params
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden - Surveillant only, or user is not assigned to this room
+        "404":
+          description: Subject not found in this session
+
+  /api/v1/attendance/{sessionId}/validate:
+    post:
+      summary: Validate attendance for a room subject
+      description: |
+        Records attendance for one subject in one session room.
+        Scanned candidates are marked PRESENT with their anonymity code.
+        Candidates assigned to the room but omitted from scans are marked ABSENT.
+        The session must be OPEN.
+      tags: [Attendance]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateAttendanceBody"
+            example:
+              sessionRoomId: 550e8400-e29b-41d4-a716-446655440010
+              subjectId: 550e8400-e29b-41d4-a716-446655440020
+              scans:
+                - candidateId: 550e8400-e29b-41d4-a716-446655440030
+                  qrCode: copy-002
+      responses:
+        "201":
+          description: Attendance validated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ValidateAttendanceResult"
+        "400":
+          description: Validation error, session is not OPEN, empty room, or candidate is not assigned to this room
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden - Surveillant only, or user is not assigned to this room
+        "404":
+          description: Session or subject not found
+        "409":
+          description: Attendance already validated for this room-subject, or QR code already in use
+
+  /api/v1/attendance/{sessionId}/summary:
+    get:
+      summary: Get attendance summary
+      description: |
+        Coordinator/Admin view of attendance completion and present/absent
+        counts per room and per subject. Includes readyToLock.
+      tags: [Attendance]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session summary retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AttendanceSessionSummary"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden - Coordinator or Admin only
+        "404":
+          description: Session not found
+
+  /api/v1/attendance/{sessionId}/lock:
+    post:
+      summary: Lock attendance
+      description: |
+        Irreversibly locks attendance for the session, marks candidates with any
+        ABSENT record as INVALID, marks fully present candidates as VALID, and
+        advances the session to ATTENDANCE_LOCKED. The session must be OPEN and
+        all room-subject attendance sets must be complete.
+      tags: [Attendance]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockAttendanceBody"
+            example:
+              confirm: true
+      responses:
+        "200":
+          description: Attendance locked
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/LockAttendanceResult"
+        "400":
+          description: Validation error, session is not OPEN, or attendance is incomplete
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden - Coordinator or Admin only
+        "404":
+          description: Session not found
+        "409":
+          description: Session is no longer OPEN
+
+  # == CANDIDATES ===============================================================
   /api/v1/candidates/{sessionId}/import:
     post:
       summary: Import candidates from CSV or Excel

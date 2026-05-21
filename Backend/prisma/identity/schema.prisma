@@ -73,6 +73,7 @@ model User {
   coordinatedFormations DoctoralFormation[]
   sessionStaff          SessionStaff[]
   importBatches         ImportBatch[]
+  recordedAttendances AttendanceRecord[]
 
   surveillantRoomAssignments RoomSurveillantAssignment[]
 
@@ -163,6 +164,7 @@ model CompetitionSession {
   sessionStaff    SessionStaff[]
   candidateRoomAssignments   RoomCandidateAssignment[]
   surveillantRoomAssignments RoomSurveillantAssignment[]
+  attendanceRecords AttendanceRecord[]
 
   @@map("competition_sessions")
 }
@@ -219,6 +221,7 @@ model Subject {
   session CompetitionSession @relation(fields: [sessionId], references: [id])
 
   @@map("subjects")
+  attendanceRecords AttendanceRecord[]
 }
 
 // ─── GRADING CONFIG ───────────────────────────────────────────────────────────
@@ -283,6 +286,7 @@ model Candidate {
   specialization SessionSpecialization? @relation(fields: [specializationId], references: [id])
   importBatch    ImportBatch?           @relation(fields: [importBatchId], references: [id])
   roomAssignment RoomCandidateAssignment?
+  attendanceRecord AttendanceRecord[]
 
   @@unique([sessionId, registrationNumber])
   @@map("candidates")
@@ -346,6 +350,7 @@ model SessionRoom {
 
   candidateAssignments   RoomCandidateAssignment[]
   surveillantAssignments RoomSurveillantAssignment[]
+  attendanceRecords AttendanceRecord[]
 
   // FIX: room appears only once per session — not per specialization
   @@unique([sessionId, roomId])
@@ -381,4 +386,40 @@ model RoomSurveillantAssignment {
 
   @@unique([sessionRoomId, userId])
   @@map("room_surveillant_assignments")
+}
+
+
+model AttendanceRecord {
+  id            String           @id @default(uuid())
+  sessionId     String
+  candidateId   String           
+  sessionRoomId String
+  subjectId      String           // NEW: Which subject is this for?
+  anonymityCode  String?          @unique // NEW: "copy-002". Unique prevents giving the same copy twice!
+  recordedBy    String
+  status        AttendanceStatus
+  method        AttendanceMethod @default(QR_SCAN)
+  recordedAt    DateTime         @default(now())
+
+  session     CompetitionSession @relation(fields: [sessionId], references: [id])
+  candidate   Candidate          @relation(fields: [candidateId], references: [id])
+  sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id])
+  recorder    User               @relation(fields: [recordedBy], references: [id])
+  subject        Subject          @relation(fields: [subjectId], references: [id])
+  
+  // FIX: A candidate can only have one copy/attendance per subject
+  @@unique([candidateId, subjectId]) 
+  
+
+  @@map("attendance_records")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+enum AttendanceMethod {
+  QR_SCAN
+  MANUAL  // coordinator override if needed
 }
