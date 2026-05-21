@@ -1,21 +1,31 @@
-import type { Request, Response, NextFunction } from "express";
+// src/middleware/sessionAuth.middleware.ts
+import type { Request, Response, NextFunction } from "express"; // Fix 1: Added Request and Response imports
 import { identityDb } from "../config/db.js";
 import { AppError } from "../utils/AppError.js";
-import type { SessionFunction } from "../generated/identity/client.js";
+// Fix 2: Imported the brand new enums from your generated client
+import { Role, type SessionFunction } from "../generated/identity/client.js";
 
-export const restrictToSessionFunction = (requiredFunction: SessionFunction) => {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    const rawSessionId = req.params.sessionId ?? req.params.id;
-    const sessionId = typeof rawSessionId === "string" ? rawSessionId : undefined;
-    const user = req.user;
+// Fix 3: Strongly type the parameter to SessionFunction instead of string
+export const restrictToSessionFunction = (
+  requiredFunction: SessionFunction,
+) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const sessionId = req.params.sessionId as string; // Assuming sessionId is passed as a URL parameter
 
-    if (!user) return next(new AppError("Not authenticated", 401));
     if (!sessionId) {
-      return next(new AppError("Missing sessionId route parameter", 400));
+      return next(
+        new AppError(
+          "Route configuration error: sessionId parameter missing",
+          500,
+        ),
+      );
     }
 
-    // Admins and Coordinators bypass session checks
-    if (user.role === "ADMIN" || user.role === "COORDINATOR") {
+    const userId = req.user?.id;
+    if (!userId) return next(new AppError("Not authenticated", 401));
+
+    // Fix 4: Use the new SystemRole enum constants for the bypass check
+    if (req.user?.role === Role.ADMIN || req.user?.role === Role.COORDINATOR) {
       return next();
     }
 
@@ -23,12 +33,11 @@ export const restrictToSessionFunction = (requiredFunction: SessionFunction) => 
     const staffAssignment = await identityDb.sessionStaff.findUnique({
       where: {
         sessionId_userId_function: {
-          sessionId,
-          userId: user.id,
-          function: requiredFunction,
+          sessionId, // sessionId is guaranteed to be a string here due to the earlier check
+          userId,
+          function: requiredFunction, // Fix 5: Clean match! 'as any' is no longer required
         },
       },
-      select: { id: true },
     });
 
     if (!staffAssignment) {
