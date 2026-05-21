@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store";
 const api = axios.create({
   //baseURL: "http://localhost:4000/",
    // replace with your Express backend
-   baseURL: "http://192.168.85.116:4213",
+   baseURL: "http://192.168.142.116:4213",
 });
 
  api.interceptors.request.use(async (config) => {
