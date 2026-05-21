@@ -112,6 +112,10 @@ export default function HomeLayout() {
         name="change-password/layout"
         options={{ href: null, headerShown: false }}
       />
+      <Tabs.Screen
+        name="shifts/[id]/index"
+        options={{ href: null, headerShown: false }} 
+      />
     </Tabs>
   );
 }
