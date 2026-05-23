@@ -3,6 +3,76 @@ import { identityDb } from "../../config/db.js";
 import { AppError } from "../../utils/AppError.js";
 import { parseImportFile } from "./candidates.import.js";
 import { CandidateStatus } from "../../generated/identity/client.js";
+import type { CandidateRow, RowError } from "./candidates.types.js";
+
+type SessionSpecializationWithFormation = {
+  id: string;
+  formationSpecialization: {
+    name: string;
+    code: string;
+  };
+};
+
+const normalizeSpecialityText = (value?: string | null) => {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\u2019/g, "'")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const getSpecialityMatchKeys = (value?: string | null) => {
+  const keys = new Set<string>();
+  const text = (value ?? "").trim();
+  if (!text) return keys;
+
+  const full = normalizeSpecialityText(text);
+  if (full) keys.add(full);
+
+  const withoutParentheticalSuffix = text.replace(/\s*\([^)]*\)\s*$/g, "");
+  const base = normalizeSpecialityText(withoutParentheticalSuffix);
+  if (base) keys.add(base);
+
+  for (const match of text.matchAll(/\(([^)]+)\)/g)) {
+    const parenthetical = normalizeSpecialityText(match[1]);
+    if (parenthetical) keys.add(parenthetical);
+  }
+
+  return keys;
+};
+
+const findMatchingSpecialization = (
+  row: CandidateRow,
+  sessionSpecs: SessionSpecializationWithFormation[],
+) => {
+  const rowKeys = getSpecialityMatchKeys(row.requestedSpeciality);
+  if (rowKeys.size === 0) return undefined;
+
+  return sessionSpecs.find((spec) => {
+    const specKeys = new Set([
+      ...getSpecialityMatchKeys(spec.formationSpecialization.name),
+      ...getSpecialityMatchKeys(spec.formationSpecialization.code),
+    ]);
+
+    return [...rowKeys].some((key) => specKeys.has(key));
+  });
+};
+
+const createSpecialityError = (
+  row: CandidateRow,
+  message: string,
+): RowError => {
+  return {
+    row: row.sourceRow ?? 0,
+    field: "requestedSpeciality",
+    value: row.requestedSpeciality ?? null,
+    message: row.sourceSheet ? `${row.sourceSheet}: ${message}` : message,
+  };
+};
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
 
@@ -26,11 +96,31 @@ export const importCandidates = async (
 
   // 2. parse the file
   const { valid, errors } = parseImportFile(file.buffer);
+  const importErrors: RowError[] = [...errors];
 
   // 3. detect source from mimetype
   const source = file.mimetype === "text/csv" ? "CSV" : "EXCEL";
 
-  // 4. create import batch record first
+  // 4. fetch session specializations for matching
+  const sessionSpecs = await identityDb.sessionSpecialization.findMany({
+    where: { sessionId },
+    include: { formationSpecialization: true },
+  });
+  if (sessionSpecs.length === 0) {
+    throw new AppError(
+      "Cannot import candidates: no specializations configured for this session",
+      400,
+    );
+  }
+
+  const availableSpecialities = sessionSpecs
+    .map(
+      (spec) =>
+        `${spec.formationSpecialization.name} (${spec.formationSpecialization.code})`,
+    )
+    .join(", ");
+
+  // 5. create import batch record before inserting candidates
   const batch = await identityDb.importBatch.create({
     data: {
       sessionId,
@@ -38,82 +128,93 @@ export const importCandidates = async (
       source,
       fileName: file.originalname,
       totalRecords: valid.length + errors.length,
-      validRecords: valid.length,
-      invalidRecords: errors.length,
-      // FIX: Used safe JSON stringification to prevent runtime errors and removed unsafe `as any` (Issue 4)
+      validRecords: 0,
+      invalidRecords: importErrors.length,
       validationErrors:
-        errors.length > 0 ? JSON.parse(JSON.stringify(errors)) : undefined,
+        importErrors.length > 0
+          ? JSON.parse(JSON.stringify(importErrors))
+          : undefined,
     },
   });
 
-  // 5. fetch session specializations for matching
-  const sessionSpecs = await identityDb.sessionSpecialization.findMany({
-    where: { sessionId },
-    include: { formationSpecialization: true },
-  });
-
   // 6. insert valid candidates — map data and match specialization
-  const candidatesToInsert = valid.map((row) => {
-    const matchedSpec = sessionSpecs.find((s) => {
-      const specName = s.formationSpecialization.name.toLowerCase();
-      const specCode = s.formationSpecialization.code.toLowerCase();
-      const rowSpec = (row.degreeSpeciality ?? row.fieldOfStudy ?? "")
-        .toLowerCase()
-        .trim();
-
-      // Guard: prevent empty strings from returning true on .includes()
-      if (!rowSpec) return false;
-
-      return (
-        specName === rowSpec ||
-        specCode === rowSpec ||
-        specName.includes(rowSpec) ||
-        rowSpec.includes(specName)
+  const candidatesToInsert = valid.flatMap((row) => {
+    if (!row.requestedSpeciality?.trim()) {
+      importErrors.push(
+        createSpecialityError(
+          row,
+          "Requested speciality is required to assign the candidate to a session specialization",
+        ),
       );
-    });
+      return [];
+    }
 
-    return {
-      sessionId,
-      importBatchId: batch.id,
-      status: "REGISTERED" as const,
-      registrationNumber: row.registrationNumber,
-      firstName: row.firstName,
-      lastName: row.lastName,
-      firstNameAr: row.firstNameAr || null,
-      lastNameAr: row.lastNameAr || null,
-      email: row.email || null,
-      phoneNumber: row.phoneNumber || null,
-      address: row.address || null,
-      dateOfBirth: row.dateOfBirth || null,
-      birthPlace: row.birthPlace || null,
-      nationalId: row.nationalId || null,
-      degreeInstitution: row.degreeInstitution || null,
-      degreeSpeciality: row.degreeSpeciality || null,
-      fieldOfStudy: row.fieldOfStudy || null,
-      cursusType: row.cursusType || null,
-      graduationYear: row.graduationYear ?? null,
-      masterClassCategory: row.masterClassCategory || null,
-      masterAverage: row.masterAverage ?? null,
-      bachelorAverage: row.bachelorAverage ?? null,
-      specializationId: matchedSpec?.id ?? null, // ← matched here
-    };
+    const matchedSpec = findMatchingSpecialization(row, sessionSpecs);
+    if (!matchedSpec) {
+      importErrors.push(
+        createSpecialityError(
+          row,
+          `Requested speciality did not match this session. Available specialities: ${availableSpecialities}`,
+        ),
+      );
+      return [];
+    }
+
+    return [
+      {
+        sessionId,
+        importBatchId: batch.id,
+        status: "REGISTERED" as const,
+        registrationNumber: row.registrationNumber,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        firstNameAr: row.firstNameAr || null,
+        lastNameAr: row.lastNameAr || null,
+        email: row.email || null,
+        phoneNumber: row.phoneNumber || null,
+        address: row.address || null,
+        dateOfBirth: row.dateOfBirth || null,
+        birthPlace: row.birthPlace || null,
+        nationalId: row.nationalId || null,
+        degreeInstitution: row.degreeInstitution || null,
+        degreeSpeciality: row.degreeSpeciality || null,
+        fieldOfStudy: row.fieldOfStudy || null,
+        cursusType: row.cursusType || null,
+        graduationYear: row.graduationYear ?? null,
+        masterClassCategory: row.masterClassCategory || null,
+        masterAverage: row.masterAverage ?? null,
+        bachelorAverage: row.bachelorAverage ?? null,
+        requestedSpeciality: row.requestedSpeciality || null,
+
+        specializationId: matchedSpec.id,
+      },
+    ];
   });
-
   // FIX: Added clarifying comment regarding `skipDuplicates` limitation (Issue 3)
   // NOTE: `createMany` with `skipDuplicates: true` conflates skipped-duplicates with
   // insert-failures (e.g., constraint violations). It's a known Prisma limitation.
-  const result = await identityDb.candidate.createMany({
-    data: candidatesToInsert,
-    skipDuplicates: true,
-  });
+  const result =
+    candidatesToInsert.length > 0
+      ? await identityDb.candidate.createMany({
+          data: candidatesToInsert,
+          skipDuplicates: true,
+        })
+      : { count: 0 };
 
   const imported = result.count;
-  const skipped = valid.length - imported;
+  const skipped = candidatesToInsert.length - imported;
   const duplicates: string[] = [];
 
   await identityDb.importBatch.update({
     where: { id: batch.id },
-    data: { validRecords: imported },
+    data: {
+      validRecords: imported,
+      invalidRecords: importErrors.length,
+      validationErrors:
+        importErrors.length > 0
+          ? JSON.parse(JSON.stringify(importErrors))
+          : undefined,
+    },
   });
 
   return {
@@ -122,10 +223,10 @@ export const importCandidates = async (
     source,
     imported,
     skipped,
-    invalid: errors.length,
+    invalid: importErrors.length,
     duplicates: duplicates.slice(0, 20),
-    errors: errors.slice(0, 50),
-    summary: `${imported} imported, ${skipped} skipped (duplicates), ${errors.length} invalid`,
+    errors: importErrors.slice(0, 50),
+    summary: `${imported} imported, ${skipped} skipped (duplicates), ${importErrors.length} invalid`,
   };
 };
 // ─── READ ─────────────────────────────────────────────────────────────────────

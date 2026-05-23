@@ -1,7 +1,17 @@
 import * as xlsx from "xlsx";
 import { CandidateRowSchema, type ParseResult } from "./candidates.types.js";
 
-// ─── COLUMN NAME NORMALIZER ───────────────────────────────────────────────────
+const normalizeHeaderKey = (key: string): string => {
+  return key
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\u00a0/g, " ")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 const normalizeKey = (key: string): string => {
   const map: Record<string, string> = {
     "matricule candidat": "registrationNumber",
@@ -20,11 +30,8 @@ const normalizeKey = (key: string): string => {
     lastname: "lastName",
     "last name": "lastName",
 
-    "prénom fr": "firstName",
     "prenom fr": "firstName",
-    prénom_fr: "firstName",
     prenom_fr: "firstName",
-    prénom: "firstName",
     prenom: "firstName",
     first_name: "firstName",
     firstname: "firstName",
@@ -32,22 +39,18 @@ const normalizeKey = (key: string): string => {
 
     "nom ar": "lastNameAr",
     nom_ar: "lastNameAr",
-    "prénom ar": "firstNameAr",
     "prenom ar": "firstNameAr",
-    prénom_ar: "firstNameAr",
     prenom_ar: "firstNameAr",
 
     mail: "email",
     email: "email",
     "e-mail": "email",
 
-    téléphone: "phoneNumber",
     telephone: "phoneNumber",
     phone: "phoneNumber",
     phone_number: "phoneNumber",
     "phone number": "phoneNumber",
 
-    "adresse de résidence": "address",
     "adresse de residence": "address",
     adresse: "address",
     address: "address",
@@ -64,28 +67,23 @@ const normalizeKey = (key: string): string => {
     "birth place": "birthPlace",
     birthplace: "birthPlace",
 
-    national_id: "nationalId",
-    nationalid: "nationalId",
     "national id": "nationalId",
+    nationalid: "nationalId",
+    national_id: "nationalId",
     nin: "nationalId",
 
-    "etablissement (diplômé)": "degreeInstitution",
     "etablissement (diplome)": "degreeInstitution",
     etablissement: "degreeInstitution",
     institution: "degreeInstitution",
     degree_institution: "degreeInstitution",
     degreeinstitution: "degreeInstitution",
 
-    "spécialité diplôme (si lmd)": "degreeSpeciality",
     "specialite diplome (si lmd)": "degreeSpeciality",
-    "spécialité diplôme": "degreeSpeciality",
     "specialite diplome": "degreeSpeciality",
     degree_title: "degreeSpeciality",
     degreetitle: "degreeSpeciality",
-    diplôme: "degreeSpeciality",
     diplome: "degreeSpeciality",
 
-    filière: "fieldOfStudy",
     filiere: "fieldOfStudy",
     "field of study": "fieldOfStudy",
 
@@ -93,14 +91,12 @@ const normalizeKey = (key: string): string => {
     "type cursus": "cursusType",
     cursus: "cursusType",
 
-    "année de diplôme": "graduationYear",
     "annee de diplome": "graduationYear",
-    "année diplôme": "graduationYear",
+    "annee diplome": "graduationYear",
     graduation_year: "graduationYear",
     graduationyear: "graduationYear",
     "graduation year": "graduationYear",
 
-    "catégorie de classement master": "masterClassCategory",
     "categorie de classement master": "masterClassCategory",
 
     "moyenne de classement master": "masterAverage",
@@ -108,16 +104,18 @@ const normalizeKey = (key: string): string => {
     "note de master": "masterAverage",
     "master average": "masterAverage",
 
-    "moyenne générale de l'avant dernière année de la formation graduée":
+    "moyenne generale de l'avant derniere annee de la formation graduee":
       "bachelorAverage",
+    "moyenne generale de la 2eme annee de master ou le cas echeant, de la derniere annee de la formation graduee":
+      "masterAverage",
+    "note de memoire de master": "masterAverage",
     "bachelor average": "bachelorAverage",
+
+    "specialite demandee (fr)": "requestedSpeciality",
+    "specialite demandee": "requestedSpeciality",
   };
 
-  const normalized = key
-    .toLowerCase()
-    .replace(/\xa0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = normalizeHeaderKey(key);
 
   return map[normalized] ?? normalized;
 };
@@ -132,7 +130,6 @@ const normalizeRow = (
   return normalized;
 };
 
-// ─── DATE NORMALIZER ──────────────────────────────────────────────────────────
 const normalizeDate = (value: unknown): Date | undefined => {
   if (!value) return undefined;
 
@@ -150,13 +147,12 @@ const normalizeDate = (value: unknown): Date | undefined => {
   return undefined;
 };
 
-// ─── DETECT HEADER ROW ────────────────────────────────────────────────────────
 const findHeaderRowIndex = (rows: unknown[][]): number => {
   for (let i = 0; i < Math.min(rows.length, 6); i++) {
     const row = rows[i];
     if (!row) continue;
 
-    const rowStr = row.map((c) => String(c).toLowerCase().trim()).join(" ");
+    const rowStr = row.map((c) => normalizeHeaderKey(String(c))).join(" ");
 
     if (
       rowStr.includes("matricule candidat") ||
@@ -169,7 +165,6 @@ const findHeaderRowIndex = (rows: unknown[][]): number => {
   return -1;
 };
 
-// ─── PARSE SINGLE SHEET ───────────────────────────────────────────────────────
 const parseSheet = (sheet: xlsx.WorkSheet, sheetName: string): ParseResult => {
   const rawRows = xlsx.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
@@ -204,7 +199,6 @@ const parseSheet = (sheet: xlsx.WorkSheet, sheetName: string): ParseResult => {
 
   rows.forEach((rawRow, index) => {
     const rowNumber = headerIndex + index + 2;
-
     const normalized = normalizeRow(rawRow);
 
     if (
@@ -229,8 +223,9 @@ const parseSheet = (sheet: xlsx.WorkSheet, sheetName: string): ParseResult => {
       ]),
     );
 
-    // normalize dates
     cleaned.dateOfBirth = normalizeDate(cleaned.dateOfBirth);
+    cleaned.sourceRow = rowNumber;
+    cleaned.sourceSheet = sheetName;
 
     const result = CandidateRowSchema.safeParse(cleaned);
 
@@ -253,7 +248,6 @@ const parseSheet = (sheet: xlsx.WorkSheet, sheetName: string): ParseResult => {
   return { valid, errors };
 };
 
-// ─── MAIN PARSE FUNCTION ──────────────────────────────────────────────────────
 export const parseImportFile = (buffer: Buffer): ParseResult => {
   const workbook = xlsx.read(buffer, {
     type: "buffer",

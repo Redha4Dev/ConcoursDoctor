@@ -52,6 +52,9 @@ export const CandidateRowSchema = z.object({
   masterClassCategory: z.string().optional().or(z.literal("")),
   masterAverage: z.coerce.number().min(0).max(20).optional(),
   bachelorAverage: z.coerce.number().min(0).max(20).optional(),
+  requestedSpeciality: z.string().optional().or(z.literal("")),
+  sourceRow: z.number().int().positive().optional(),
+  sourceSheet: z.string().optional(),
 });
 
 export type CandidateRow = z.infer<typeof CandidateRowSchema>;
