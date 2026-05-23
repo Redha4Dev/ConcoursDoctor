@@ -6,15 +6,22 @@ import {
   TouchableOpacity,
   Switch,
   StatusBar,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialIcons, Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useAuth } from "../../../providers/AuthProvider";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+   const { user, logout, token } = useAuth();
+
+  // --- LOGOUT HANDLER ---
+  
 
   return (
     <SafeAreaView className="flex-1 bg-[#F8F9FA]" edges={["top", "left", "right"]}>
@@ -22,7 +29,7 @@ export default function SettingsScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 24, paddingBottom: 120 }} // Bottom clearance for the floating nav bar
+        contentContainerStyle={{ padding: 24, paddingBottom: 140 }} // Adjusted padding to give the logout button extra breathing room
         showsVerticalScrollIndicator={false}
       >
         {/* --- HEADER SECTION --- */}
@@ -166,7 +173,7 @@ export default function SettingsScreen() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => router.push("/change-password")}
-          className="bg-white rounded-[24px] p-5 flex-row items-center justify-between border border-[#E5E7EB]"
+          className="bg-white rounded-[24px] p-5 flex-row items-center justify-between border border-[#E5E7EB] mb-8"
         >
           <View className="flex-row items-center">
             <Ionicons name="key-outline" size={20} color="#6B7280" />
@@ -176,8 +183,30 @@ export default function SettingsScreen() {
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
+
+        {/* --- SESSION MANAGEMENT SECTION --- */}
+        <View className="flex-row items-center mb-4">
+          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+          <Text className="text-[14px] font-black text-[#EF4444] uppercase tracking-wider ml-2">
+            Session
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={logout}
+          className="bg-[#FEF2F2] rounded-[24px] p-5 flex-row items-center justify-between border border-[#FEE2E2]"
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="power-outline" size={20} color="#EF4444" />
+            <Text className="text-[16px] font-bold text-[#B91C1C] ml-3">
+              Log Out Account
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#FCA5A5" />
+        </TouchableOpacity>
         
       </ScrollView>
     </SafeAreaView>
   );
-}
+} 
