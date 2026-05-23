@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import api from "../../../utils/axios"; // Adjust relative path to match your project tree
+import api from "../../../utils/axios"; // Paths preserved from your original codebase
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -152,9 +152,10 @@ export default function DashboardScreen() {
                 </View>
               </View>
 
+              {/* Updated Dynamic Routing URL parameters */}
               <TouchableOpacity
                 activeOpacity={0.9}
-                onPress={() => router.push(`/shifts/${activeSession.assignmentId}`)}
+                onPress={() => router.push(`/shifts/${activeSession.sessionId}/${activeSession.sessionRoomId}`)}
                 className="bg-white py-4 rounded-[20px] flex-row items-center justify-center"
               >
                 <Text className="text-[#311B92] text-[16px] font-extrabold mr-2">
@@ -181,7 +182,8 @@ export default function DashboardScreen() {
             <TouchableOpacity
               key={shift.assignmentId}
               activeOpacity={0.8}
-              onPress={() => router.push(`/shifts/${shift.assignmentId}`)}
+              
+              onPress={() => router.push(`/shifts/${shift.sessionId}/${shift.sessionRoomId}`)}
               className="bg-white rounded-[24px] p-5 border border-[#E5E7EB] mb-4"
               style={{
                 shadowColor: "#000",
