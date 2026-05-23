@@ -202,6 +202,7 @@ export const assignSurveillant = asyncHandler(
         sessionId: id,
         sessionRoomId: sessionRoomId,
         userId: req.body.userId,
+        subjectId: req.body.subjectId,
       },
     }).catch(() => {});
 
@@ -218,8 +219,9 @@ export const removeSurveillant = asyncHandler(
     const id = req.params.id as string;
     const sessionRoomId = req.params.sessionRoomId as string;
     const userId = req.params.userId as string;
+    const subjectId = req.params.subjectId as string;
 
-    await roomsService.removeSurveillant(id, sessionRoomId, userId);
+    await roomsService.removeSurveillant(id, sessionRoomId, userId, subjectId);
 
     audit({
       userId: req.user!.id,
@@ -232,6 +234,7 @@ export const removeSurveillant = asyncHandler(
         sessionId: id,
         sessionRoomId: sessionRoomId,
         userId: userId,
+        subjectId: subjectId,
       },
     }).catch(() => {});
 

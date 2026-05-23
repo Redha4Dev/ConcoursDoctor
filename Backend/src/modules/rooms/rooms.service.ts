@@ -410,8 +410,7 @@ export const autoAssign = async (sessionId: string) => {
 export const assignSurveillant = async (
   sessionId: string,
   sessionRoomId: string,
-  subjectId: string, // 👈 Make sure your controller passes this!
-  dto: AssignSurveillantDto,
+  dto: AssignSurveillantDto, // 👈 Reverted to 3 parameters
 ) => {
   const session = await getSessionOrThrow(sessionId);
   assertDraftOrOpen(session.status);
@@ -421,7 +420,14 @@ export const assignSurveillant = async (
     throw new AppError("Cannot assign surveillant to a locked room", 400);
   }
 
-  // 1️⃣ NEW: Verify the subject exists in this session
+  // Extract subjectId from the DTO
+  const { userId, subjectId } = dto;
+
+  if (!subjectId) {
+    throw new AppError("subjectId is required to assign a surveillant", 400);
+  }
+
+  // 1️⃣ Verify the subject exists in this session
   const examSubject = await identityDb.subject.findFirst({
     where: { id: subjectId, sessionId },
   });
@@ -429,14 +435,14 @@ export const assignSurveillant = async (
     throw new AppError("Subject not found in this session", 404);
   }
 
-  const user = await identityDb.user.findUnique({ where: { id: dto.userId } });
+  const user = await identityDb.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError("User not found", 404);
   if (!user.isActive) throw new AppError("User is inactive", 400);
 
   const staffRecord = await identityDb.sessionStaff.findFirst({
     where: {
       sessionId,
-      userId: dto.userId,
+      userId,
       function: "SURVEILLANT",
     },
   });
@@ -447,12 +453,12 @@ export const assignSurveillant = async (
     );
   }
 
-  // 2️⃣ FIXED: Check for existing assignment using the new unique constraint
+  // 2️⃣ Check for existing assignment using the new unique constraint
   const existing = await identityDb.roomSurveillantAssignment.findUnique({
     where: {
       sessionRoomId_userId_subjectId: {
         sessionRoomId,
-        userId: dto.userId,
+        userId,
         subjectId,
       },
     },
@@ -463,17 +469,17 @@ export const assignSurveillant = async (
       409,
     );
 
-  // 3️⃣ FIXED: Inject the subjectId into the database creation
+  // 3️⃣ Inject the subjectId into the database creation
   const assignment = await identityDb.roomSurveillantAssignment.create({
     data: {
       sessionRoomId,
-      userId: dto.userId,
+      userId,
       sessionId,
-      subjectId, // 👈 Saves the subject mapping
+      subjectId,
     },
   });
 
-  // 4️⃣ FIXED: Count surveillants based on the ROOM + SUBJECT combination
+  // 4️⃣ Count surveillants based on the ROOM + SUBJECT combination
   const surveillantCount = await identityDb.roomSurveillantAssignment.count({
     where: { sessionRoomId, subjectId },
   });
@@ -488,8 +494,6 @@ export const assignSurveillant = async (
       where: { sessionRoomId },
     });
 
-    // Optional: You could update your template to accept examSubject.name
-    // so the email tells them exactly what exam they are watching!
     const { subject: emailSubject, html } = surveillantRoomAssignmentTemplate(
       `${user.firstName} ${user.lastName}`,
       sessionRoom.room.name,
