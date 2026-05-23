@@ -14,6 +14,7 @@ import {
   GradingConfigSchema,
 } from "./sessions.types.js";
 import * as sessionsCtrl from "./sessions.controller.js";
+import { anonymizeSessionController } from "../anonymization/anonymization.controller.js";
 
 // room controller + schemas live in the rooms module
 import * as roomsCtrl from "../rooms/rooms.controller.js";
@@ -46,6 +47,11 @@ router.delete(
   "/:id",
   restrictTo("ADMIN", "COORDINATOR"),
   sessionsCtrl.deleteSession,
+);
+router.post(
+  "/:sessionId/anonymize",
+  restrictTo("ADMIN", "COORDINATOR"),
+  anonymizeSessionController,
 );
 
 // ─── SESSION SPECIALIZATIONS ──────────────────────────────────────────────────
@@ -172,6 +178,12 @@ router.post(
   "/:id/rooms/:sessionRoomId/lock",
   restrictTo("ADMIN", "COORDINATOR"),
   roomsCtrl.lockRoom,
+);
+
+router.patch(
+  "/:id/status",
+  restrictTo("ADMIN", "COORDINATOR"),
+  sessionsCtrl.openSession,
 );
 
 export default router;

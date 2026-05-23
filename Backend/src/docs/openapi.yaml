@@ -23,6 +23,9 @@ info:
     - **AUDITOR** — Read-only session audit function.
 
     ## Change Log
+    - **2026-05-23** — Updated schemas and endpoints based on recent code changes.
+      - Candidates: Added `requestedSpeciality` to `Candidate` schema. Added `defaultSpecializationId` to `POST /api/v1/candidates/{sessionId}/import`.
+      - Sessions: Added `POST /api/v1/sessions/{sessionId}/anonymize` to support anonymizing candidates in a session.
     - **2026-05-01** — Full sync pass against implementation.
       - Users: Refactored to flat model (removed profile sub-tables). CreateUserBody no longer accepts `role`.
       - Auth: Login response now includes `token` in body. Password policies tightened (uppercase + number required).
@@ -1145,6 +1148,11 @@ components:
           type: integer
           nullable: true
           example: 2024
+        requestedSpeciality:
+          type: string
+          nullable: true
+          example: Intelligence Artificielle
+          description: Spécialité demandée
         masterClassCategory:
           type: string
           nullable: true
@@ -3227,6 +3235,43 @@ paths:
         "404":
           description: Session not found
 
+  /api/v1/sessions/{sessionId}/anonymize:
+    post:
+      summary: Anonymize session
+      description: |
+        Anonymizes all candidates in the session.
+        Admin or Coordinator only.
+      tags: [Sessions]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Session anonymized successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          anonymizedCount:
+                            type: integer
+                            example: 120
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Session not found
+
   # ══ SESSION ROOMS ════════════════════════════════════════════════════════════
   /api/v1/sessions/{id}/rooms:
     # UPDATED — was a stub, now fully documented
@@ -3844,6 +3889,10 @@ paths:
               type: object
               required: [file]
               properties:
+                defaultSpecializationId:
+                  type: string
+                  format: uuid
+                  description: Optional ID to force a specific specialization for all imported candidates.
                 file:
                   type: string
                   format: binary

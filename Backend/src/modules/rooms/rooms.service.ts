@@ -251,7 +251,7 @@ export const autoAssign = async (sessionId: string) => {
   const session = await getSessionOrThrow(sessionId);
   assertOpen(session.status);
 
-  // get all session rooms grouped by specialization
+  // 1. Get all session rooms grouped by specialization
   const sessionRooms = await identityDb.sessionRoom.findMany({
     where: { sessionId },
     include: {
@@ -265,7 +265,7 @@ export const autoAssign = async (sessionId: string) => {
     throw new AppError("No rooms added to this session", 400);
   }
 
-  // get all registered candidates with their specialization
+  // 2. Get all registered candidates with their specialization
   const candidates = await identityDb.candidate.findMany({
     where: { sessionId, status: "REGISTERED" },
     include: { specialization: { include: { formationSpecialization: true } } },
@@ -276,7 +276,7 @@ export const autoAssign = async (sessionId: string) => {
     throw new AppError("No registered candidates in this session", 400);
   }
 
-  // group rooms by specializationId
+  // 3. Group rooms by specializationId
   const roomsBySpec = new Map<string, typeof sessionRooms>();
   for (const sr of sessionRooms) {
     const specId = sr.specializationId;
@@ -284,7 +284,7 @@ export const autoAssign = async (sessionId: string) => {
     roomsBySpec.get(specId)!.push(sr);
   }
 
-  // group candidates by specializationId
+  // 4. Group candidates by specializationId
   const candidatesBySpec = new Map<string, typeof candidates>();
   const unassignedCandidates: typeof candidates = [];
 
@@ -298,7 +298,7 @@ export const autoAssign = async (sessionId: string) => {
     candidatesBySpec.get(specId)!.push(candidate);
   }
 
-  // validate capacity per specialization before doing anything
+  // 5. Validate capacity per specialization before modifying the DB
   const capacityErrors: string[] = [];
   for (const [specId, specCandidates] of candidatesBySpec.entries()) {
     const rooms = roomsBySpec.get(specId) ?? [];
@@ -329,11 +329,6 @@ export const autoAssign = async (sessionId: string) => {
     );
   }
 
-  // clear existing assignments
-  await identityDb.roomCandidateAssignment.deleteMany({
-    where: { sessionId: sessionId },
-  });
-
   const allAssignments: {
     sessionRoomId: string;
     candidateId: string;
@@ -348,7 +343,7 @@ export const autoAssign = async (sessionId: string) => {
     assigned: number;
   }[] = [];
 
-  // assign per specialization
+  // 6. Compute allocations per specialization chunk
   for (const [specId, specCandidates] of candidatesBySpec.entries()) {
     const rooms = roomsBySpec.get(specId) ?? [];
     let cursor = 0;
@@ -378,27 +373,34 @@ export const autoAssign = async (sessionId: string) => {
     }
   }
 
-  // bulk insert all assignments
-  await identityDb.roomCandidateAssignment.createMany({ data: allAssignments });
+  // 7. Execute all mutations atomically inside a safe transaction block
+  return identityDb.$transaction(async (tx) => {
+    // Clear existing assignments safely
+    await tx.roomCandidateAssignment.deleteMany({
+      where: { sessionId: sessionId },
+    });
 
-  // update usedCapacity on each session room
-  for (const sr of sessionRooms) {
-    const assigned = allAssignments.filter(
-      (a) => a.sessionRoomId === sr.id,
-    ).length;
-    if (assigned > 0) {
-      await identityDb.sessionRoom.update({
+    // Bulk insert new room assignments
+    await tx.roomCandidateAssignment.createMany({ data: allAssignments });
+
+    // Update usedCapacity on every single room (re-setting to 0 if empty to clear stale values)
+    for (const sr of sessionRooms) {
+      const assignedCount = allAssignments.filter(
+        (a) => a.sessionRoomId === sr.id,
+      ).length;
+
+      await tx.sessionRoom.update({
         where: { id: sr.id },
-        data: { usedCapacity: assigned },
+        data: { usedCapacity: assignedCount }, // Always updates, ensuring clean resets
       });
     }
-  }
 
-  return {
-    totalAssigned: allAssignments.length,
-    unassigned: unassignedCandidates.length,
-    rooms: summary,
-  };
+    return {
+      totalAssigned: allAssignments.length,
+      unassigned: unassignedCandidates.length,
+      rooms: summary,
+    };
+  });
 };
 
 // ─── ASSIGN SURVEILLANT ───────────────────────────────────────────────────────
