@@ -48,6 +48,16 @@ enum ImportSource {
   MANUAL
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+enum AttendanceMethod {
+  QR_SCAN
+  MANUAL  // coordinator override if needed
+}
+
 // ─── USER ─────────────────────────────────────────────────────────────────────
 
 model User {
@@ -170,6 +180,7 @@ model CompetitionSession {
   candidateRoomAssignments   RoomCandidateAssignment[]
   surveillantRoomAssignments RoomSurveillantAssignment[]
   attendanceRecords AttendanceRecord[]
+  anonymatMappings AnonymatMapping[]
 
   @@map("competition_sessions")
 }
@@ -223,6 +234,7 @@ model Subject {
   description  String?
 
   attendanceRecords AttendanceRecord[]
+  anonymatMappings AnonymatMapping[]
   session CompetitionSession @relation(fields: [sessionId], references: [id])
 
   @@map("subjects")
@@ -245,36 +257,41 @@ model GradingConfig {
 // ─── CANDIDATE ────────────────────────────────────────────────────────────────
 
 model Candidate {
-  id                 String          @id @default(uuid())
+  id                 String                 @id @default(uuid())
   sessionId          String
-  specializationId   String?         // matched on import from degreeSpeciality field
+
+  // 🟢 Updated Comment: Linked strictly by matching the "Specialité Demandée" Excel column text value
+  specializationId   String?
 
   registrationNumber String
 
   // French name (required)
-  firstName String
-  lastName  String
+  firstName          String
+  lastName           String
 
   // Arabic name (from PROGRES)
-  firstNameAr String?
-  lastNameAr  String?
+  firstNameAr        String?
+  lastNameAr         String?
 
   // contact
-  email       String?
-  phoneNumber String?
-  address     String?
+  email              String?
+  phoneNumber        String?
+  address            String?
 
   // identity
-  dateOfBirth String?
-  birthPlace  String?
-  nationalId  String?
+  dateOfBirth        String?
+  birthPlace         String?
+  nationalId         String?
 
   // degree info
-  degreeInstitution String?
-  degreeSpeciality  String? // raw value from CSV — used for specialization matching
-  fieldOfStudy      String?
-  cursusType        String? // LMD / CLASSIQUE BAC+5
-  graduationYear    Int?
+  degreeInstitution  String?
+  degreeSpeciality   String? // Raw value from CSV (The candidate's historical university track)
+  fieldOfStudy       String?
+  cursusType         String? // LMD / CLASSIQUE BAC+5
+  graduationYear     Int?
+
+  // 🟢 NEW: Store the exact raw string provided in the "Specialité Demandée" column
+  requestedSpeciality String?
 
   // tie-breaker fields (ranking — ministerial regulation)
   masterClassCategory String?
@@ -282,15 +299,16 @@ model Candidate {
   bachelorAverage     Float?  // tie-breaker 3
 
   // system
-  status        CandidateStatus @default(REGISTERED)
-  importBatchId String?
-  importedAt    DateTime        @default(now())
+  status              CandidateStatus        @default(REGISTERED)
+  importBatchId       String?
+  importedAt          DateTime               @default(now())
 
-  session        CompetitionSession     @relation(fields: [sessionId], references: [id])
-  specialization SessionSpecialization? @relation(fields: [specializationId], references: [id])
-  importBatch    ImportBatch?           @relation(fields: [importBatchId], references: [id])
-  roomAssignment RoomCandidateAssignment?
-  attendanceRecords AttendanceRecord[]
+  session             CompetitionSession     @relation(fields: [sessionId], references: [id])
+  specialization      SessionSpecialization? @relation(fields: [specializationId], references: [id])
+  importBatch         ImportBatch?           @relation(fields: [importBatchId], references: [id])
+  roomAssignment      RoomCandidateAssignment?
+  attendanceRecords   AttendanceRecord[]
+  anonymatMappings    AnonymatMapping[]
 
   @@unique([sessionId, registrationNumber])
   @@map("candidates")
@@ -418,12 +436,22 @@ model AttendanceRecord {
   @@map("attendance_records")
 }
 
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
-}
 
-enum AttendanceMethod {
-  QR_SCAN
-  MANUAL  // coordinator override if needed
+
+
+model AnonymatMapping {
+  id            String   @id @default(uuid())
+  sessionId     String
+  subjectId     String
+  candidateId   String
+  qrCode        String
+  anonymousCode String   @unique
+  createdAt     DateTime @default(now())
+
+  session   CompetitionSession @relation(fields: [sessionId], references: [id])
+  subject   Subject            @relation(fields: [subjectId], references: [id])
+  candidate Candidate          @relation(fields: [candidateId], references: [id])
+
+  @@unique([candidateId, subjectId])
+  @@map("anonymat_mappings")
 }
