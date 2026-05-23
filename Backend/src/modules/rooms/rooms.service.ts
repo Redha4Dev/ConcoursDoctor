@@ -410,6 +410,7 @@ export const autoAssign = async (sessionId: string) => {
 export const assignSurveillant = async (
   sessionId: string,
   sessionRoomId: string,
+  subjectId: string, // 👈 Make sure your controller passes this!
   dto: AssignSurveillantDto,
 ) => {
   const session = await getSessionOrThrow(sessionId);
@@ -420,11 +421,18 @@ export const assignSurveillant = async (
     throw new AppError("Cannot assign surveillant to a locked room", 400);
   }
 
+  // 1️⃣ NEW: Verify the subject exists in this session
+  const examSubject = await identityDb.subject.findFirst({
+    where: { id: subjectId, sessionId },
+  });
+  if (!examSubject) {
+    throw new AppError("Subject not found in this session", 404);
+  }
+
   const user = await identityDb.user.findUnique({ where: { id: dto.userId } });
   if (!user) throw new AppError("User not found", 404);
   if (!user.isActive) throw new AppError("User is inactive", 400);
 
-  // FIX: check SessionStaff not FormationStaff (FormationStaff no longer exists)
   const staffRecord = await identityDb.sessionStaff.findFirst({
     where: {
       sessionId,
@@ -439,23 +447,39 @@ export const assignSurveillant = async (
     );
   }
 
+  // 2️⃣ FIXED: Check for existing assignment using the new unique constraint
   const existing = await identityDb.roomSurveillantAssignment.findUnique({
-    where: { sessionRoomId_userId: { sessionRoomId, userId: dto.userId } },
+    where: {
+      sessionRoomId_userId_subjectId: {
+        sessionRoomId,
+        userId: dto.userId,
+        subjectId,
+      },
+    },
   });
   if (existing)
-    throw new AppError("Surveillant already assigned to this room", 409);
+    throw new AppError(
+      "Surveillant already assigned to this room for this subject",
+      409,
+    );
 
+  // 3️⃣ FIXED: Inject the subjectId into the database creation
   const assignment = await identityDb.roomSurveillantAssignment.create({
-    data: { sessionRoomId, userId: dto.userId, sessionId },
+    data: {
+      sessionRoomId,
+      userId: dto.userId,
+      sessionId,
+      subjectId, // 👈 Saves the subject mapping
+    },
   });
 
-  // warn if below 2 surveillants
+  // 4️⃣ FIXED: Count surveillants based on the ROOM + SUBJECT combination
   const surveillantCount = await identityDb.roomSurveillantAssignment.count({
-    where: { sessionRoomId },
+    where: { sessionRoomId, subjectId },
   });
   const warning =
     surveillantCount < 2
-      ? `Room has ${surveillantCount} surveillant(s). Minimum required is 2.`
+      ? `Room has ${surveillantCount} surveillant(s) for the subject ${examSubject.name}. Minimum required is 2.`
       : undefined;
 
   // send assignment email — fire and forget
@@ -463,7 +487,10 @@ export const assignSurveillant = async (
     const candidateCount = await identityDb.roomCandidateAssignment.count({
       where: { sessionRoomId },
     });
-    const { subject, html } = surveillantRoomAssignmentTemplate(
+
+    // Optional: You could update your template to accept examSubject.name
+    // so the email tells them exactly what exam they are watching!
+    const { subject: emailSubject, html } = surveillantRoomAssignmentTemplate(
       `${user.firstName} ${user.lastName}`,
       sessionRoom.room.name,
       sessionRoom.room.building ?? "Bâtiment principal",
@@ -472,7 +499,7 @@ export const assignSurveillant = async (
       session.examDate.toLocaleDateString("fr-DZ", { dateStyle: "full" }),
       candidateCount,
     );
-    await sendEmail({ emailto: user.email, subject, html });
+    await sendEmail({ emailto: user.email, subject: emailSubject, html });
   } catch (err: unknown) {
     console.error(
       `[Email] Failed to send room assignment email to ${user.email}:`,
@@ -482,12 +509,12 @@ export const assignSurveillant = async (
 
   return { assignment, warning };
 };
-
 // ─── REMOVE SURVEILLANT ───────────────────────────────────────────────────────
 
 export const removeSurveillant = async (
   sessionId: string,
   sessionRoomId: string,
+  subjectId: string, // 👈 ADDED: We need to know which exam to remove them from
   userId: string,
 ) => {
   const session = await getSessionOrThrow(sessionId);
@@ -498,13 +525,28 @@ export const removeSurveillant = async (
     throw new AppError("Cannot remove surveillant from a locked room", 400);
   }
 
+  // 1️⃣ FIXED: Use the new compound unique key to find the assignment
   const assignment = await identityDb.roomSurveillantAssignment.findUnique({
-    where: { sessionRoomId_userId: { sessionRoomId, userId } },
+    where: {
+      sessionRoomId_userId_subjectId: {
+        sessionRoomId,
+        userId,
+        subjectId,
+      },
+    },
   });
+
   if (!assignment) throw new AppError("Surveillant assignment not found", 404);
 
+  // 2️⃣ FIXED: Use the new compound unique key to delete the assignment
   await identityDb.roomSurveillantAssignment.delete({
-    where: { sessionRoomId_userId: { sessionRoomId, userId } },
+    where: {
+      sessionRoomId_userId_subjectId: {
+        sessionRoomId,
+        userId,
+        subjectId,
+      },
+    },
   });
 };
 

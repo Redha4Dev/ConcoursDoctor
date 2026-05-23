@@ -68,6 +68,10 @@ export async function getMyAssignments(userId: string) {
           candidateAssignments: { select: { id: true } },
         },
       },
+      // 1️⃣ NEW: Include the subject details in the query
+      subject: {
+        select: { id: true, name: true },
+      },
     },
     orderBy: { sessionRoom: { session: { examDate: "asc" } } },
   });
@@ -76,6 +80,7 @@ export async function getMyAssignments(userId: string) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 86_400_000);
 
+  // 2️⃣ FIXED: Update the type to include the subject
   type AssignmentItem = {
     assignmentId: string;
     sessionId: string;
@@ -85,6 +90,7 @@ export async function getMyAssignments(userId: string) {
     sessionRoomId: string;
     room: { name: string; floor: string | null; building: string | null };
     candidateCount: number;
+    subject: { id: string; name: string }; // 👈 ADDED
   };
 
   const grouped: Record<"upcoming" | "active" | "past", AssignmentItem[]> = {
@@ -95,6 +101,8 @@ export async function getMyAssignments(userId: string) {
 
   for (const a of assignments) {
     const { session, room, candidateAssignments } = a.sessionRoom;
+
+    // 3️⃣ FIXED: Map the subject data into the returned item
     const item: AssignmentItem = {
       assignmentId: a.id,
       sessionId: session.id,
@@ -108,6 +116,10 @@ export async function getMyAssignments(userId: string) {
         building: room.building ?? null,
       },
       candidateCount: candidateAssignments.length,
+      subject: {
+        id: a.subject.id,
+        name: a.subject.name,
+      }, // 👈 ADDED
     };
 
     const examDate = new Date(session.examDate);

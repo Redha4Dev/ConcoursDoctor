@@ -238,6 +238,7 @@ model Subject {
   session CompetitionSession @relation(fields: [sessionId], references: [id])
 
   @@map("subjects")
+  roomSurveillantAssignments RoomSurveillantAssignment[]
 }
 
 // ─── GRADING CONFIG ───────────────────────────────────────────────────────────
@@ -386,6 +387,7 @@ model RoomCandidateAssignment {
   sessionRoomId String
   candidateId   String @unique // one candidate → one room only
   sessionId     String          // FIX: added for efficient querying and deleteMany
+  
 
   sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade)
   candidate   Candidate          @relation(fields: [candidateId], references: [id])
@@ -401,12 +403,14 @@ model RoomSurveillantAssignment {
   sessionRoomId String
   userId        String
   sessionId     String // FIX: added for efficient querying
+  subjectId     String // NEW: which subject is this surveillant assigned to?
 
   sessionRoom SessionRoom        @relation(fields: [sessionRoomId], references: [id], onDelete: Cascade)
   user        User               @relation(fields: [userId], references: [id])
   session     CompetitionSession @relation(fields: [sessionId], references: [id])
+  subject     Subject            @relation(fields: [subjectId], references: [id]) // 👈 1. ADD THIS RELATION
 
-  @@unique([sessionRoomId, userId])
+  @@unique([sessionRoomId, userId, subjectId]) // 👈 2. UPDATE THIS LINE
   @@map("room_surveillant_assignments")
 }
 
