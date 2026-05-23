@@ -1,4 +1,4 @@
-import type { Role } from "../generated/identity";
+import type { Role } from "../generated/identity/client.js";
 
 declare global {
   namespace Express {

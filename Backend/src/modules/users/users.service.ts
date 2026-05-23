@@ -6,12 +6,23 @@ import { AppError } from "../../utils/AppError.js";
 import { sendEmail } from "../../utils/mailer.js";
 import { tempPasswordTemplate } from "../../utils/emailTemplates.js";
 import type { CreateUserDto, UpdateUserDto } from "./users.types.js";
-import type { Prisma } from "../../generated/identity/client.js"; // Assuming this is your generated path
+import type { Prisma, Role } from "../../generated/identity/client.js";
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const generateTempPassword = (): string =>
   crypto.randomBytes(8).toString("hex");
+
+const GLOBAL_ROLES: readonly Role[] = ["ADMIN", "COORDINATOR", "STAFF"];
+
+const parseGlobalRoleFilter = (role?: string): Role | undefined => {
+  if (!role) return undefined;
+  if (GLOBAL_ROLES.includes(role as Role)) return role as Role;
+  throw new AppError(
+    `Invalid role filter. Expected one of: ${GLOBAL_ROLES.join(", ")}`,
+    400,
+  );
+};
 
 // ─── CREATE ───────────────────────────────────────────────────────────────────
 
@@ -30,7 +41,7 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
       lastName: dto.lastName,
       email: dto.email,
       passwordHash,
-      role: "NOT_ASSIGNED", // Matches schema default
+      role: dto.role ?? "STAFF", // default role
       createdBy,
       mustChangePassword: true,
       phoneNumber: dto.phoneNumber ?? null,
@@ -59,7 +70,7 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
     `${dto.firstName} ${dto.lastName}`,
     dto.email,
     tempPassword,
-    "STAFF",
+    user.role,
   );
 
   let emailSent = false;
@@ -80,17 +91,16 @@ export const createUser = async (dto: CreateUserDto, createdBy: string) => {
 
 export const getUsers = async (filters: {
   search?: string;
-  role?: string; // Changed from systemRole to role to match schema
+  role?: string;
   page?: number;
   limit?: number;
 }) => {
   const { search, role, page = 1, limit = 20 } = filters;
   const skip = (page - 1) * limit;
+  const roleFilter = parseGlobalRoleFilter(role);
 
-  // Build the dynamic where clause
   const where: Prisma.UserWhereInput = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    role: role ? (role as any) : { notIn: ["ADMIN"] },
+    ...(roleFilter ? { role: roleFilter } : {}),
     ...(search
       ? {
           OR: [
@@ -220,7 +230,7 @@ export const updateUser = async (id: string, dto: UpdateUserDto) => {
       firstName: true,
       lastName: true,
       email: true,
-      role: true, // Fixed: Swapped systemRole out for role
+      role: true,
       isActive: true,
       institution: true,
       academicGrade: true,
@@ -325,7 +335,7 @@ export const resendWelcomeEmail = async (id: string) => {
     `${user.firstName} ${user.lastName}`,
     user.email,
     tempPassword,
-    "STAFF",
+    user.role,
   );
 
   let emailSent = false;

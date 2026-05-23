@@ -1,6 +1,6 @@
 // src/modules/sessions/sessions.service.ts
 import { identityDb } from "../../config/db.js";
-import type { Role } from "../../generated/identity/enums.js";
+import type { SessionFunction } from "../../generated/identity/enums.js";
 import { AppError } from "../../utils/AppError.js";
 import type {
   CreateSessionDto,
@@ -32,6 +32,24 @@ const assertDraft = (status: string) => {
       "Session can only be modified while in DRAFT status",
       400,
     );
+};
+
+const SESSION_FUNCTIONS: readonly SessionFunction[] = [
+  "CORRECTOR",
+  "JURY_MEMBER",
+  "SURVEILLANT",
+  "AUDITOR",
+];
+
+const parseSessionFunction = (func: string): SessionFunction => {
+  if (SESSION_FUNCTIONS.includes(func as SessionFunction)) {
+    return func as SessionFunction;
+  }
+
+  throw new AppError(
+    `Invalid session function. Expected one of: ${SESSION_FUNCTIONS.join(", ")}`,
+    400,
+  );
 };
 
 // ─── SESSIONS ─────────────────────────────────────────────────────────────────
@@ -325,7 +343,7 @@ export const getSessionStaff = async (sessionId: string) => {
 
 export const assignStaff = async (
   sessionId: string,
-  dto: AssignStaffDto, // { userId, function: "CORRECTOR" | "JURY_MEMBER" | ... }
+  dto: AssignStaffDto,
   assignedBy: string,
 ) => {
   const session = await getSessionOrThrow(sessionId);
@@ -347,36 +365,24 @@ export const assignStaff = async (
   if (existing)
     throw new AppError("User already assigned with this function", 409);
 
-  return identityDb.$transaction(async (tx) => {
-    const staff = await tx.sessionStaff.create({
-      data: {
-        sessionId,
-        userId: dto.userId,
-        function: dto.function,
-        assignedBy,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-          },
+  return identityDb.sessionStaff.create({
+    data: {
+      sessionId,
+      userId: dto.userId,
+      function: dto.function,
+      assignedBy,
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
         },
       },
-    });
-
-    // flip role if user was NOT_ASSIGNED
-    if (user.role === "NOT_ASSIGNED") {
-      await tx.user.update({
-        where: { id: dto.userId },
-        data: { role: dto.function as Role },
-      });
-    }
-
-    return staff;
+    },
   });
 };
 
@@ -385,12 +391,14 @@ export const removeStaff = async (
   userId: string,
   func: string,
 ) => {
+  const functionName = parseSessionFunction(func);
+
   const record = await identityDb.sessionStaff.findUnique({
     where: {
       sessionId_userId_function: {
         sessionId,
         userId,
-        function: func as Role,
+        function: functionName,
       },
     },
   });

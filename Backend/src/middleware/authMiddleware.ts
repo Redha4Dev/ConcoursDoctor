@@ -4,37 +4,52 @@ import { verifyToken } from "../utils/jwt.js";
 import { identityDb } from "../config/db.js";
 import { AppError } from "../utils/AppError.js";
 
+type DecodedToken = {
+  id: unknown;
+};
+
+const getAuthToken = (req: Request) => {
+  if (typeof req.cookies?.jwt === "string") {
+    const token = req.cookies.jwt.trim();
+    return token.length > 0 ? token : undefined;
+  }
+
+  const authorization = req.headers.authorization;
+  if (authorization?.startsWith("Bearer ")) {
+    const token = authorization.slice("Bearer ".length).trim();
+    return token.length > 0 ? token : undefined;
+  }
+
+  return undefined;
+};
+
+const getUserIdFromToken = (token: string) => {
+  const decoded = verifyToken(token) as unknown as DecodedToken;
+
+  if (typeof decoded.id !== "string" || decoded.id.length === 0) {
+    throw new AppError("Invalid token payload", 401);
+  }
+
+  return decoded.id;
+};
+
 export const protect = async (
   req: Request,
   _res: Response,
   next: NextFunction,
 ) => {
   try {
-    // extract token from cookie or Authorization header
-    let token: string | undefined;
-
-    if (req.cookies?.jwt) {
-      token = req.cookies.jwt;
-    } else if (req.headers.authorization?.startsWith("Bearer ")) {
-      token = req.headers.authorization.split(" ")[1];
-    }
+    const token = getAuthToken(req);
 
     if (!token) {
-      return next(new AppError("Not authenticated — please log in", 401));
+      return next(new AppError("Not authenticated - please log in", 401));
     }
 
-    // verify token
-    const decoded = verifyToken(token) as {
-      id: string;
-      email: string;
-      role: string;
-      firstName: string;
-      lastName: string;
-    };
+    const userId = getUserIdFromToken(token);
 
-    // live DB lookup — ensures deactivated users can't use old tokens
+    // Live DB lookup ensures deactivated users cannot use old tokens.
     const user = await identityDb.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: userId },
       select: {
         id: true,
         email: true,
@@ -49,16 +64,6 @@ export const protect = async (
       return next(new AppError("User not found or account is inactive", 401));
     }
 
-    // NOT_ASSIGNED users cannot access anything except auth routes
-    if (user.role === "NOT_ASSIGNED") {
-      return next(
-        new AppError(
-          "Account not yet assigned — contact your administrator",
-          403,
-        ),
-      );
-    }
-
     req.user = {
       id: user.id,
       email: user.email,
@@ -67,8 +72,8 @@ export const protect = async (
       lastName: user.lastName,
     };
 
-    next();
-  } catch {
-    next(new AppError("Invalid or expired token — please log in again", 401));
+    return next();
+  } catch (error) {
+    return next(error);
   }
 };

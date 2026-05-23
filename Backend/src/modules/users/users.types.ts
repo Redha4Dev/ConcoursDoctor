@@ -9,6 +9,7 @@ export const CreateUserSchema = z.object({
   institution: z.string().optional(),
   academicGrade: z.string().optional(),
   specialization: z.string().optional(),
+  role: z.enum(["ADMIN", "STAFF", "COORDINATOR"]).optional(), // Optional role with default handled in service
 });
 
 export const UpdateUserSchema = z.object({

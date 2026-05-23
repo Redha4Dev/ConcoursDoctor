@@ -1,5 +1,6 @@
 import { identityDb } from "../../config/db.js";
 import { AppError } from "../../utils/AppError.js";
+import type { Role } from "../../generated/identity/client.js";
 import type { ValidateAttendanceBody } from "./attendance.types.js";
 
 type PrismaUniqueConstraintError = {
@@ -27,6 +28,9 @@ const uniqueTargetIncludes = (
     ? target.includes(field)
     : typeof target === "string" && target.includes(field);
 };
+
+const canBypassRoomAssignment = (role: Role) =>
+  role === "ADMIN" || role === "COORDINATOR";
 
 const formatCandidateLabel = (candidate: {
   id: string;
@@ -117,15 +121,20 @@ export async function getMyAssignments(userId: string) {
 
 export async function getRoomCandidates(
   userId: string,
+  userRole: Role,
   sessionId: string,
   sessionRoomId: string,
   subjectId?: string,
 ) {
-  const assignment = await identityDb.roomSurveillantAssignment.findFirst({
-    where: { userId, sessionRoomId, sessionId },
-    select: { id: true },
-  });
-  if (!assignment) throw new AppError("You are not assigned to this room", 403);
+  if (!canBypassRoomAssignment(userRole)) {
+    const assignment = await identityDb.roomSurveillantAssignment.findFirst({
+      where: { userId, sessionRoomId, sessionId },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new AppError("You are not assigned to this room", 403);
+    }
+  }
 
   const [roomCandidates, subjects, records] = await Promise.all([
     identityDb.roomCandidateAssignment.findMany({
@@ -198,6 +207,7 @@ export async function getRoomCandidates(
 
 export async function validateAttendance(
   userId: string,
+  userRole: Role,
   sessionId: string,
   body: ValidateAttendanceBody,
 ) {
@@ -226,12 +236,14 @@ export async function validateAttendance(
       );
     }
 
-    const assignment = await tx.roomSurveillantAssignment.findFirst({
-      where: { userId, sessionRoomId, sessionId },
-      select: { id: true },
-    });
-    if (!assignment) {
-      throw new AppError("You are not assigned to this room", 403);
+    if (!canBypassRoomAssignment(userRole)) {
+      const assignment = await tx.roomSurveillantAssignment.findFirst({
+        where: { userId, sessionRoomId, sessionId },
+        select: { id: true },
+      });
+      if (!assignment) {
+        throw new AppError("You are not assigned to this room", 403);
+      }
     }
 
     const subject = await tx.subject.findFirst({

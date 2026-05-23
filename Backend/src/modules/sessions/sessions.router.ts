@@ -76,7 +76,7 @@ router.delete(
 
 // ─── SESSION STAFF ────────────────────────────────────────────────────────────
 // Assign users to session with a function (CORRECTOR, JURY_MEMBER, SURVEILLANT...)
-// Flips user.role from NOT_ASSIGNED to assigned role
+// Does not mutate the user's global role.
 
 router.get("/:id/staff", sessionsCtrl.getSessionStaff);
 
