@@ -115,7 +115,7 @@ export default function HomeLayout() {
       />
 
       <Tabs.Screen
-        name="shifts/[sessionId]/[sessionRoomId]"
+        name="shifts/[sessionId]/[sessionRoomId]/[subjectId]"
         options={{ href: null, headerShown: false }}
       />
 
