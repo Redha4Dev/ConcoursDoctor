@@ -16,6 +16,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Camera, CameraView } from "expo-camera";
 import api from "../../../../../../utils/axios";
+import { i18n } from "../../../../../../locales/i18n";
 
 export default function CandidateListScreen() {
   const router = useRouter();
@@ -242,11 +243,11 @@ export default function CandidateListScreen() {
 
           <View className="flex-1">
             <Text className="text-[24px] font-extrabold text-[#111827] mb-2 tracking-tight">
-              Room Candidates
+              {i18n.t("Room Candidates")}
             </Text>
             <View className="bg-[#EEEBFF] px-3 py-1.5 rounded-full align-self-start max-w-[100px]">
               <Text className="text-[#311B92] text-[12px] font-bold text-center">
-                {candidates.length} Total
+                {candidates.length} {i18n.t("Total")}
               </Text>
             </View>
           </View>
@@ -259,7 +260,7 @@ export default function CandidateListScreen() {
           <Ionicons name="search-outline" size={20} color="#9CA3AF" />
           <TextInput
             className="flex-1 ml-3 text-[15px] font-medium text-[#1F2937]"
-            placeholder="Search candidate by name or ID..."
+            placeholder={i18n.t("Search candidate by name or ID")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -272,7 +273,7 @@ export default function CandidateListScreen() {
         <View className="absolute inset-0 bg-white/70 z-50 justify-center items-center">
           <ActivityIndicator size="large" color="#311B92" />
           <Text className="text-[#311B92] font-bold mt-3">
-            Submitting Attendance...
+            {i18n.t("Submitting Attendance...")}
           </Text>
         </View>
       )}
@@ -313,7 +314,7 @@ export default function CandidateListScreen() {
                         {cName}
                       </Text>
                       <Text className="text-[13px] font-medium text-[#9CA3AF]">
-                        REG: {cReg}
+                        {i18n.t("REG:")} {cReg}
                       </Text>
                     </View>
 
@@ -332,7 +333,7 @@ export default function CandidateListScreen() {
                       <Text
                         className={`ml-2 text-[13px] font-bold ${isScanned ? "text-[#311B92]" : "text-white"}`}
                       >
-                        {isScanned ? "Scanned" : "Scan QR"}
+                        {isScanned ? i18n.t("Scanned") : i18n.t("Scan QR")}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -353,7 +354,7 @@ export default function CandidateListScreen() {
           >
             <MaterialCommunityIcons name="cloud-upload" size={22} color="white" />
             <Text className="text-white font-bold text-[16px] ml-2">
-              Submit Attendance ({pendingScans.length})
+              {i18n.t("Submit Attendance")} ({pendingScans.length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -390,7 +391,7 @@ export default function CandidateListScreen() {
           >
             <View className="p-6 flex-row justify-between items-center bg-[#111827]/90 mx-4 mt-4 rounded-2xl">
               <Text className="text-white font-bold text-[18px]">
-                Align QR Code
+                {i18n.t("Align QR Code")}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -407,7 +408,7 @@ export default function CandidateListScreen() {
             <View className="items-center justify-center flex-1">
               <View style={styles.targetFrame} />
               <Text className="text-white text-center font-semibold text-[14px] mt-6 mx-10 bg-black/70 px-4 py-2.5 rounded-xl">
-                Place the candidate code within the lines to scan.
+                {i18n.t("Place the candidate code within the lines to scan.")}
               </Text>
             </View>
             <View className="h-10" />

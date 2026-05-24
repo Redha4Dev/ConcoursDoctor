@@ -11,12 +11,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import api from "../../../utils/axios"; 
+import { i18n } from "../../../locales/i18n";
+import { useAuth } from "../../../providers/AuthProvider";
 
 export default function DashboardScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ active: [], upcoming: [], past: [] });
   const [error, setError] = useState(null);
+  const { user } = useAuth();
+  console.log(user);
 
   // --- FETCH ASSIGNMENTS ---
   useEffect(() => {
@@ -94,7 +98,7 @@ export default function DashboardScreen() {
               : todayLabel}
           </Text>
           <Text className="text-[32px] font-extrabold text-[#1F2937] tracking-tight leading-tight">
-            Good morning,{"\n"}Dr. Anis
+            {i18n.t("Good morning,")}{"\n"}Dr. {user.lastName}
           </Text>
         </View>
 
@@ -103,11 +107,11 @@ export default function DashboardScreen() {
           <View>
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-[20px] font-black text-[#111827]">
-                Next Assignment
+                {i18n.t("Next Assignment")}
               </Text>
               <View className="bg-[#EEEBFF] px-3 py-1 rounded-full">
                 <Text className="text-[#311B92] text-[12px] font-bold">
-                  Status: {activeSession.sessionStatus}
+                  {i18n.t("Status:")} {activeSession.sessionStatus}
                 </Text>
               </View>
             </View>
@@ -125,7 +129,7 @@ export default function DashboardScreen() {
               <View className="flex-row justify-between items-start mb-4">
                 <View className="flex-1 pr-2">
                   <Text className="text-[#9E8BFF] text-[12px] font-bold uppercase tracking-wider mb-1">
-                    CURRENT SESSION
+                    {i18n.t("CURRENT SESSION")}
                   </Text>
                   <Text
                     className="text-white text-[24px] font-black tracking-tight"
@@ -148,7 +152,7 @@ export default function DashboardScreen() {
                   <View className="flex-row items-center mb-1">
                     <Ionicons name="time-outline" size={16} color="#A594FF" />
                     <Text className="text-[#9E8BFF] text-[13px] font-semibold ml-1.5 uppercase">
-                      Time
+                      {i18n.t("Time")}
                     </Text>
                   </View>
                   <Text className="text-white text-[17px] font-bold">
@@ -164,7 +168,7 @@ export default function DashboardScreen() {
                       color="#A594FF"
                     />
                     <Text className="text-[#9E8BFF] text-[13px] font-semibold ml-1.5 uppercase">
-                      Location
+                      {i18n.t("Location")}
                     </Text>
                   </View>
                   <Text
@@ -187,7 +191,7 @@ export default function DashboardScreen() {
                 className="bg-white py-4 rounded-[20px] flex-row items-center justify-center"
               >
                 <Text className="text-[#311B92] text-[16px] font-extrabold mr-2">
-                  Open Candidate List ({activeSession.candidateCount})
+                  {i18n.t("Open Candidate List")} ({activeSession.candidateCount})
                 </Text>
                 <Ionicons name="arrow-forward" size={18} color="#311B92" />
               </TouchableOpacity>
@@ -201,14 +205,14 @@ export default function DashboardScreen() {
               color="#9CA3AF"
             />
             <Text className="text-[#6B7280] font-bold text-[16px] mt-2">
-              No active shifts scheduled today
+              {i18n.t("No active shifts scheduled today")}
             </Text>
           </View>
         )}
 
         {/* --- UPCOMING SHIFTS SECTION --- */}
         <Text className="text-[20px] font-black text-[#111827] mb-4">
-          Upcoming Shifts
+          {i18n.t("Upcoming Shifts")}
         </Text>
 
         {upcomingShifts.length > 0 ? (
@@ -256,7 +260,7 @@ export default function DashboardScreen() {
                   <Ionicons name="lock-closed" size={12} color="#C2410C" />
                   <Text className="text-[#C2410C] text-[12px] font-bold ml-1">
                     {shift.sessionStatus === "DRAFT"
-                      ? "Waiting to start"
+                      ? i18n.t("Waiting to start")
                       : shift.sessionStatus}
                   </Text>
                 </View>
@@ -265,7 +269,7 @@ export default function DashboardScreen() {
           ))
         ) : (
           <Text className="text-[#9CA3AF] text-[14px] font-medium italic mt-2">
-            No upcoming assignments found.
+            {i18n.t("No upcoming assignments found.")}
           </Text>
         )}
 
