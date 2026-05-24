@@ -29,16 +29,35 @@ model ExamCopy {
   id            String     @id @default(uuid())
   sessionId     String     // reference to identity DB session
   subjectId     String     // reference to identity DB subject
-  qrCode        String     @unique  // printed on paper — "copy-042"
-  candidateId   String?    // set during attendance — cleared after anonymization
-  anonymousCode String?    // DOCT-YYYY-XXXX — set during anonymization
+  
+  // Notice: candidateId and qrCode are REMOVED. 
+  // Correction DB only knows the final anonymous code!
+  anonymousCode String     @unique 
+  
   status        CopyStatus @default(PENDING)
   createdAt     DateTime   @default(now())
 
-  grades     CorrectionGrade[]
-  finalGrade FinalGrade?
+  assignments   CorrectorAssignment[] // 👈 Restored relation
+  grades        CorrectionGrade[]
+  finalGrade    FinalGrade?
 
   @@map("exam_copies")
+}
+
+// 👈 RESTORED: This is how correctors know what to grade!
+model CorrectorAssignment {
+  id          String   @id @default(uuid())
+  copyId      String
+  correctorId String   // userId from identity DB
+  sessionId   String
+  round       Int      // 1 (Initial parallel) or 2 (Third corrector)
+  assignedAt  DateTime @default(now())
+
+  copy ExamCopy @relation(fields: [copyId], references: [id])
+
+  @@unique([copyId, correctorId])  // corrector cannot be on same copy twice
+  @@unique([copyId, round])        // prevents assigning 3 correctors to round 1
+  @@map("corrector_assignments")
 }
 
 model CorrectionGrade {
@@ -52,16 +71,17 @@ model CorrectionGrade {
 
   copy ExamCopy @relation(fields: [copyId], references: [id])
 
-  @@unique([copyId, correctorId, round])
+  // A corrector can only submit one grade per copy
+  @@unique([copyId, correctorId]) 
   @@map("correction_grades")
 }
 
 model FinalGrade {
-  id           String         @id @default(uuid())
-  copyId       String         @unique
-  finalGrade   Float
-  appliedRule  ResolutionRule
-  computedAt   DateTime       @default(now())
+  id          String         @id @default(uuid())
+  copyId      String         @unique
+  finalGrade  Float
+  appliedRule ResolutionRule
+  computedAt  DateTime       @default(now())
 
   copy ExamCopy @relation(fields: [copyId], references: [id])
 

@@ -319,11 +319,20 @@ export const removeSessionSpecialization = async (
 
 // ─── SESSION STAFF ────────────────────────────────────────────────────────────
 
-export const getSessionStaff = async (sessionId: string) => {
+export const getSessionStaff = async (sessionId: string, func?: string) => {
   await getSessionOrThrow(sessionId);
 
+  // Build a dynamic where clause
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: Record<string, any> = { sessionId };
+
+  if (func) {
+    // This will validate the string and throw a 400 error if it's invalid
+    where.function = parseSessionFunction(func);
+  }
+
   return identityDb.sessionStaff.findMany({
-    where: { sessionId },
+    where,
     include: {
       user: {
         select: {

@@ -76,7 +76,13 @@ export const getSessionStaff = asyncHandler(
       res.status(400);
       throw new Error("Session ID is required");
     }
-    const result = await sessionsService.getSessionStaff(id);
+
+    // Read 'func' from the query string (e.g., /api/v1/sessions/:id/staff?func=CORRECTOR)
+    const func = req.query.func as string | undefined;
+
+    // Pass both the session ID and the optional function filter to the service
+    const result = await sessionsService.getSessionStaff(id, func);
+
     res
       .status(200)
       .json({ success: true, message: "Staff retrieved", data: result });

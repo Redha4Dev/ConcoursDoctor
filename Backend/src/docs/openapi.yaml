@@ -300,6 +300,8 @@ components:
         specialization:
           type: string
           example: Intelligence Artificielle
+        role:
+          $ref: "#/components/schemas/Role"
 
     # MODIFIED 2026-05-01: UpdateUserBody — removed department, academicRank, scope, isAvailable
     # (no longer exist on the User model). Kept flat fields that match UpdateUserSchema.
@@ -1013,12 +1015,16 @@ components:
     # NEW
     AssignSurveillantBody:
       type: object
-      required: [userId]
+      required: [userId, subjectId]
       properties:
         userId:
           type: string
           format: uuid
           description: User ID of a SURVEILLANT registered to this session's formation
+        subjectId:
+          type: string
+          format: uuid
+          description: Subject ID of the exam subject the surveillant is assigned to monitor
 
     # NEW — returned by POST /sessions/:id/rooms/auto-assign
     AutoAssignResult:
@@ -1983,10 +1989,13 @@ paths:
           description: User not found
 
     delete:
-      summary: Deactivate user
+      summary: Delete or deactivate user
       description: |
-        Soft delete — sets isActive=false. User cannot log in.
-        Data is preserved. Admin account cannot be deactivated.
+        Smart delete:
+        - If the user has any references (audit logs, session staff, coordinated formations, import batches, or surveillant room assignments), they are soft-deactivated (isActive=false).
+        - If they have no references, they are permanently deleted from the database.
+        Returns the user details and a `permanent` boolean flag indicating whether the deletion was permanent (hard delete) or temporary (soft deactivate).
+        Admin account cannot be deactivated/deleted.
         Admin only.
       tags: [Users]
       parameters:
@@ -1998,17 +2007,37 @@ paths:
             format: uuid
       responses:
         "200":
-          description: User deactivated
+          description: User deleted or deactivated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          firstName:
+                            type: string
+                          lastName:
+                            type: string
+                          role:
+                            $ref: "#/components/schemas/Role"
+                          isActive:
+                            type: boolean
+                          permanent:
+                            type: boolean
+                            description: true = hard deleted, false = soft deactivated
         "400":
           description: User already inactive
         "401":
           description: Not authenticated
         "403":
-          description: Forbidden — cannot deactivate Admin
+          description: Forbidden — cannot delete/deactivate Admin
         "404":
           description: User not found
 
@@ -3523,6 +3552,7 @@ paths:
               $ref: "#/components/schemas/AssignSurveillantBody"
             example:
               userId: 550e8400-e29b-41d4-a716-446655440001
+              subjectId: 550e8400-e29b-41d4-a716-446655440002
       responses:
         "201":
           description: Surveillant assigned (assignment email sent)
@@ -3548,12 +3578,12 @@ paths:
         "409":
           description: Surveillant already assigned to this room
 
-  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}:
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}/{subjectId}:
     # UPDATED — was a stub, now fully documented
     delete:
       summary: Remove surveillant from room
       description: |
-        Remove a surveillant assignment from a session room.
+        Remove a surveillant assignment from a session room for a specific subject.
         Cannot remove from a locked room.
         Session must be DRAFT or OPEN.
         Admin or Coordinator only.
@@ -3577,6 +3607,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Subject ID of the exam subject the surveillant is being removed from
       responses:
         "200":
           description: Surveillant removed
@@ -3889,10 +3926,6 @@ paths:
               type: object
               required: [file]
               properties:
-                defaultSpecializationId:
-                  type: string
-                  format: uuid
-                  description: Optional ID to force a specific specialization for all imported candidates.
                 file:
                   type: string
                   format: binary
