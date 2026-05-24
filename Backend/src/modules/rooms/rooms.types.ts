@@ -36,6 +36,7 @@ export const updateSessionRoomSchema = z.object({
 
 export const assignSurveillantSchema = z.object({
   userId: z.string().uuid("Invalid user ID"),
+  subjectId: z.string().uuid("Invalid subject ID"),
 });
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
