@@ -2,6 +2,7 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { View, TouchableOpacity, Text } from "react-native";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import { i18n } from "../../../locales/i18n";
 
 // --- CUSTOM FLOATING TAB BAR ---
 function CustomBottomTabBar({ state, descriptors, navigation }) {
@@ -73,7 +74,7 @@ function CustomBottomTabBar({ state, descriptors, navigation }) {
                   isFocused ? "text-[#311B92]" : "text-[#6B7280]"
                 }`}
               >
-                {label}
+                {i18n.t(label)}
               </Text>
             </View>
           </TouchableOpacity>
@@ -115,7 +116,7 @@ export default function HomeLayout() {
       />
 
       <Tabs.Screen
-        name="shifts/[sessionId]/[sessionRoomId]"
+        name="shifts/[sessionId]/[sessionRoomId]/[subjectId]"
         options={{ href: null, headerShown: false }}
       />
 
