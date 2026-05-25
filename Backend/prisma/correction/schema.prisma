@@ -1,5 +1,3 @@
-
-
 // prisma/correction/schema.prisma
 
 generator client {
@@ -12,76 +10,96 @@ datasource db {
 }
 
 enum CopyStatus {
-  PENDING         // not yet corrected
-  FIRST_DONE      // one corrector submitted
-  SECOND_DONE     // both correctors submitted — discrepancy check pending
-  DISCREPANCY     // gap > threshold — needs third corrector
-  THIRD_DONE      // third corrector submitted
-  VALIDATED       // final grade computed
+  PENDING      // no corrector assigned yet
+  ASSIGNED     // correctors assigned, waiting for grades
+  FIRST_DONE   // round 1 grade submitted
+  SECOND_DONE  // round 2 grade submitted — discrepancy check pending
+  DISCREPANCY  // |g1 - g2| > threshold — needs third corrector
+  THIRD_DONE   // round 3 grade submitted
+  VALIDATED    // final grade computed — immutable
 }
 
 enum ResolutionRule {
-  MEAN_TWO        // no discrepancy — mean of corrector 1 and 2
-  MEAN_CLOSEST    // discrepancy — mean of third + closest of the two
+  MEAN_TWO     // final = (g1 + g2) / 2
+  MEAN_CLOSEST // final = mean of g3 + closest of (g1, g2)
 }
 
 model ExamCopy {
   id            String     @id @default(uuid())
-  sessionId     String     // reference to identity DB session
-  subjectId     String     // reference to identity DB subject
-  
-  // Notice: candidateId and qrCode are REMOVED. 
-  // Correction DB only knows the final anonymous code!
-  anonymousCode String     @unique 
-  
+  sessionId     String     // identity DB session reference
+  subjectId     String     // identity DB subject reference
+  qrCode        String     @unique // "copy-001" — printed on paper
+  anonymousCode String?    @unique // "DOCT-2026-001" — set during anonymization
   status        CopyStatus @default(PENDING)
   createdAt     DateTime   @default(now())
 
-  assignments   CorrectorAssignment[] // 👈 Restored relation
-  grades        CorrectionGrade[]
-  finalGrade    FinalGrade?
+  assignments CorrectorAssignment[]
+  grades      CorrectionGrade[]
+  drafts      GradeDraft[]
+  finalGrade  FinalGrade?
 
   @@map("exam_copies")
 }
 
-// 👈 RESTORED: This is how correctors know what to grade!
 model CorrectorAssignment {
   id          String   @id @default(uuid())
   copyId      String
   correctorId String   // userId from identity DB
   sessionId   String
-  round       Int      // 1 (Initial parallel) or 2 (Third corrector)
+  subjectId   String
+  round       Int      // 1 or 2 (third assigned manually via endpoint)
   assignedAt  DateTime @default(now())
 
   copy ExamCopy @relation(fields: [copyId], references: [id])
 
-  @@unique([copyId, correctorId])  // corrector cannot be on same copy twice
-  @@unique([copyId, round])        // prevents assigning 3 correctors to round 1
+  @@unique([copyId, correctorId]) // corrector cannot be on same copy twice
+  @@unique([copyId, round])       // one slot per round per copy
   @@map("corrector_assignments")
 }
 
 model CorrectionGrade {
   id          String   @id @default(uuid())
   copyId      String
-  correctorId String   // user ID from identity DB
+  correctorId String
+  sessionId   String
+  subjectId   String
   grade       Float
-  round       Int      // 1 = first, 2 = second, 3 = third
+  round       Int
+  isLocked    Boolean  @default(false) // true after corrector submits
   submittedAt DateTime @default(now())
   note        String?
 
   copy ExamCopy @relation(fields: [copyId], references: [id])
 
-  // A corrector can only submit one grade per copy
-  @@unique([copyId, correctorId]) 
+  @@unique([copyId, round])       // one final grade per round per copy
+  @@unique([copyId, correctorId]) // corrector submits once per copy
   @@map("correction_grades")
 }
 
+model GradeDraft {
+  id          String   @id @default(uuid())
+  copyId      String
+  correctorId String
+  sessionId   String
+  subjectId   String
+  grade       Float
+  savedAt     DateTime @default(now()) @updatedAt
+
+  copy ExamCopy @relation(fields: [copyId], references: [id])
+
+  @@unique([copyId, correctorId]) // one draft per corrector per copy
+  @@map("grade_drafts")
+}
+
 model FinalGrade {
-  id          String         @id @default(uuid())
-  copyId      String         @unique
-  finalGrade  Float
-  appliedRule ResolutionRule
-  computedAt  DateTime       @default(now())
+  id               String         @id @default(uuid())
+  copyId           String         @unique
+  sessionId        String
+  subjectId        String
+  specializationId String?        // for ranking per specialization
+  finalGrade       Float
+  appliedRule      ResolutionRule
+  computedAt       DateTime       @default(now())
 
   copy ExamCopy @relation(fields: [copyId], references: [id])
 
