@@ -57,6 +57,8 @@ tags:
     description: Room management and session room assignments
   - name: Attendance
     description: Attendance scanning, room candidate views, summaries, and locking
+  - name: Correction
+    description: Exam grading, anonymous copy evaluation, and coordinator discrepancy management
 
 # ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
 components:
@@ -1518,6 +1520,288 @@ components:
         total:
           type: integer
           example: 42
+
+    # ── Correction ────────────────────────────────────────────────────────────
+    CopyStatus:
+      type: string
+      enum: [PENDING, ASSIGNED, FIRST_DONE, SECOND_DONE, DISCREPANCY, THIRD_DONE, VALIDATED]
+      description: Status of an anonymous exam copy during grading
+
+    ResolutionRule:
+      type: string
+      enum: [MEAN_TWO, MEAN_CLOSEST]
+      description: Grading rule applied to calculate final grade
+
+    AssignThirdCorrectorBody:
+      type: object
+      required: [correctorId]
+      properties:
+        correctorId:
+          type: string
+          format: uuid
+          description: User ID of a CORRECTOR to assign for round-3 grading
+
+    SaveDraftBody:
+      type: object
+      required: [copyId, grade, sessionId]
+      properties:
+        copyId:
+          type: string
+          format: uuid
+          description: The exam copy ID
+        grade:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: The draft grade to save
+        sessionId:
+          type: string
+          format: uuid
+          description: The session ID
+
+    SubmitGradesBody:
+      type: object
+      required: [sessionId]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: The session ID
+
+    CorrectorAssignmentSubjectProgress:
+      type: object
+      properties:
+        subjectId:
+          type: string
+          format: uuid
+        subjectName:
+          type: string
+          example: Génie Logiciel
+        totalAssigned:
+          type: integer
+          example: 24
+        graded:
+          type: integer
+          example: 10
+        pending:
+          type: integer
+          example: 14
+        locked:
+          type: boolean
+          example: false
+
+    CorrectorSessionAssignment:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        sessionLabel:
+          type: string
+          example: Concours Doctorat Informatique 2025/2026
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/CorrectorAssignmentSubjectProgress"
+
+    CorrectorAssignmentsResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CorrectorSessionAssignment"
+
+    PaperForSubject:
+      type: object
+      properties:
+        copyId:
+          type: string
+          format: uuid
+        anonymousCode:
+          type: string
+          example: copy-002
+        status:
+          $ref: "#/components/schemas/CopyStatus"
+        draftGrade:
+          type: number
+          nullable: true
+          example: 14.5
+        isLocked:
+          type: boolean
+          example: false
+        submittedGrade:
+          type: number
+          nullable: true
+          example: null
+
+    PapersForSubjectResponse:
+      type: object
+      properties:
+        papers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaperForSubject"
+        subjectName:
+          type: string
+          example: Génie Logiciel
+        maxGrade:
+          type: number
+          example: 20
+        minimumGrade:
+          type: number
+          example: 10
+
+    CopyDetailResponse:
+      type: object
+      properties:
+        copyId:
+          type: string
+          format: uuid
+        anonymousCode:
+          type: string
+          example: copy-002
+        subjectName:
+          type: string
+          example: Génie Logiciel
+        maxGrade:
+          type: number
+          example: 20
+        minimumGrade:
+          type: number
+          example: 10
+        status:
+          $ref: "#/components/schemas/CopyStatus"
+        myDraftGrade:
+          type: number
+          nullable: true
+          example: 14.5
+        mySubmittedGrade:
+          type: number
+          nullable: true
+          example: null
+        isLocked:
+          type: boolean
+          example: false
+        allGrades:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              round:
+                type: integer
+                example: 1
+              grade:
+                type: number
+                example: 12
+          description: Only populated/visible if status is VALIDATED
+        finalGrade:
+          type: number
+          nullable: true
+          example: 13.5
+          description: Only populated/visible if status is VALIDATED
+        appliedRule:
+          $ref: "#/components/schemas/ResolutionRule"
+          nullable: true
+          description: Only populated/visible if status is VALIDATED
+
+    OpenCorrectionResponse:
+      type: object
+      properties:
+        copies:
+          type: integer
+          example: 120
+        correctors:
+          type: integer
+          example: 5
+        assignmentsCreated:
+          type: integer
+          example: 240
+
+    SubjectCorrectionProgress:
+      type: object
+      properties:
+        subjectId:
+          type: string
+          format: uuid
+        subjectName:
+          type: string
+          example: Génie Logiciel
+        coefficient:
+          type: number
+          example: 3
+        totalCopies:
+          type: integer
+          example: 42
+        pending:
+          type: integer
+          example: 12
+          description: Un-graded copies (includes PENDING and ASSIGNED status)
+        firstDone:
+          type: integer
+          example: 15
+        secondDone:
+          type: integer
+          example: 10
+        discrepancy:
+          type: integer
+          example: 2
+        validated:
+          type: integer
+          example: 3
+        percentComplete:
+          type: integer
+          example: 7
+
+    CorrectionProgressResponse:
+      type: object
+      properties:
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectCorrectionProgress"
+        sessionStatus:
+          $ref: "#/components/schemas/SessionStatus"
+        allValidated:
+          type: boolean
+          example: false
+        discrepancyCount:
+          type: integer
+          example: 2
+
+    DiscrepancyItem:
+      type: object
+      properties:
+        copyId:
+          type: string
+          format: uuid
+        anonymousCode:
+          type: string
+          example: copy-002
+        subjectId:
+          type: string
+          format: uuid
+        subjectName:
+          type: string
+          example: Génie Logiciel
+        grade1:
+          type: number
+          example: 12.5
+        grade2:
+          type: number
+          example: 16.5
+        gap:
+          type: number
+          example: 4.0
+
+    DiscrepanciesResponse:
+      type: object
+      properties:
+        discrepancies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscrepancyItem"
 
 # ─── SECURITY DEFAULT ─────────────────────────────────────────────────────────
 security:
@@ -4303,3 +4587,372 @@ paths:
           description: Forbidden — Admin only
         "404":
           description: Room not found
+
+  # == CORRECTION ===============================================================
+  /api/v1/correction/my-assignments:
+    get:
+      summary: List my correction assignments
+      description: |
+        Returns all sessions where the authenticated user is assigned as a CORRECTOR,
+        along with per-subject grading progress, total papers assigned, and locking state.
+      tags: [Correction]
+      responses:
+        "200":
+          description: Assignments retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CorrectorAssignmentsResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Corrector only
+
+  /api/v1/correction/subjects/{subjectId}/papers:
+    get:
+      summary: List papers assigned for correction
+      description: |
+        Lists all anonymous copies assigned to this corrector for a specific subject in a session.
+        Includes each copy's current status, draft grade, and locked/submitted grade.
+      tags: [Correction]
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The subject ID
+        - name: sessionId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The session ID
+      responses:
+        "200":
+          description: Papers retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PapersForSubjectResponse"
+        "400":
+          description: Missing or invalid query parameters
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Not assigned to this subject/session
+        "404":
+          description: Subject not found
+
+  /api/v1/correction/drafts:
+    put:
+      summary: Auto-save grade draft
+      description: |
+        Auto-saves or updates a grade draft for an assigned copy.
+        Does not lock the grade or change the copy status.
+        Only allowed if the copy is not VALIDATED and the corrector has not already submitted a locked grade.
+      tags: [Correction]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveDraftBody"
+      responses:
+        "200":
+          description: Draft saved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          copyId:
+                            type: string
+                            format: uuid
+                          anonymousCode:
+                            type: string
+                            example: copy-002
+                          draftGrade:
+                            type: number
+                            example: 14.5
+                          savedAt:
+                            type: string
+                            format: date-time
+        "400":
+          description: Copy is already validated, grade already locked, or grade exceeds subject maximum
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Not assigned to this copy
+        "404":
+          description: Copy or subject not found
+
+  /api/v1/correction/subjects/{subjectId}/submit:
+    post:
+      summary: Submit and lock drafts
+      description: |
+        Locks all drafts for this corrector, for a subject, in a session.
+        Converts drafts into permanent, locked CorrectionGrades.
+        Triggers copy status changes, discrepancy checks (when round 2 completes),
+        and potentially transitions the session to DELIBERATION if all copies become VALIDATED.
+      tags: [Correction]
+      parameters:
+        - name: subjectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The subject ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitGradesBody"
+      responses:
+        "200":
+          description: Grades submitted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          submitted:
+                            type: integer
+                            example: 12
+                          discrepancies:
+                            type: integer
+                            example: 2
+                          validated:
+                            type: integer
+                            example: 10
+        "400":
+          description: No draft grades found to submit
+        "401":
+          description: Not authenticated
+
+  /api/v1/correction/copies/{copyId}:
+    get:
+      summary: Get copy details
+      description: |
+        Returns details of a single assigned copy.
+        Other correctors' grades and final grade details are strictly hidden unless the copy has reached VALIDATED status.
+      tags: [Correction]
+      parameters:
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The copy ID
+      responses:
+        "200":
+          description: Copy details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CopyDetailResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Not assigned to this copy
+        "404":
+          description: Copy not found
+
+  /api/v1/correction/{sessionId}/open:
+    post:
+      summary: Open correction phase
+      description: |
+        Transitions the session status to CORRECTION_OPEN and automatically assigns correctors
+        to all anonymous copies for all subjects using a sequential, load-balanced batching algorithm.
+        Requires at least 2 correctors assigned to the session, and session must currently be in ANONYMIZED status.
+        Admin or Coordinator only.
+      tags: [Correction]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The session ID
+      responses:
+        "200":
+          description: Correction phase opened successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OpenCorrectionResponse"
+        "400":
+          description: Invalid session status, or not enough correctors, or no subjects configured
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Session not found
+
+  /api/v1/correction/{sessionId}/progress:
+    get:
+      summary: Get session correction progress
+      description: |
+        Returns the per-subject grading progress breakdown (e.g. pending, first_done, second_done, discrepancy, validated)
+        for a session.
+        Admin or Coordinator only.
+      tags: [Correction]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The session ID
+      responses:
+        "200":
+          description: Correction progress retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CorrectionProgressResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Session not found
+
+  /api/v1/correction/{sessionId}/discrepancies:
+    get:
+      summary: List discrepancies
+      description: |
+        Returns a list of all copies in the session currently in DISCREPANCY status (where the gap between round 1 and round 2
+        grades exceeds the threshold). Never exposes candidate identity.
+        Admin or Coordinator only.
+      tags: [Correction]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The session ID
+      responses:
+        "200":
+          description: Discrepancies retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DiscrepanciesResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+
+  /api/v1/correction/{sessionId}/copies/{copyId}/assign-third:
+    post:
+      summary: Assign third corrector to discrepancy copy
+      description: |
+        Assigns a third corrector for round-3 grading of a copy in DISCREPANCY status.
+        The selected corrector must be registered to the session, and must not have already graded rounds 1 or 2.
+        Admin or Coordinator only.
+      tags: [Correction]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The session ID
+        - name: copyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The copy ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignThirdCorrectorBody"
+      responses:
+        "200":
+          description: Third corrector assigned successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          copyId:
+                            type: string
+                            format: uuid
+                          anonymousCode:
+                            type: string
+                            example: copy-002
+                          correctorId:
+                            type: string
+                            format: uuid
+                          round:
+                            type: integer
+                            example: 3
+        "400":
+          description: Copy is not in DISCREPANCY status, or corrector is already assigned, or not in session
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — Admin or Coordinator only
+        "404":
+          description: Copy or session not found
