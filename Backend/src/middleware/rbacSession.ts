@@ -30,13 +30,11 @@ export const restrictToSessionFunction = (
     }
 
     // Check if this specific user has the required function for this specific session
-    const staffAssignment = await identityDb.sessionStaff.findUnique({
+    const staffAssignment = await identityDb.sessionStaff.findFirst({
       where: {
-        sessionId_userId_function: {
-          sessionId, // sessionId is guaranteed to be a string here due to the earlier check
-          userId,
-          function: requiredFunction, // Fix 5: Clean match! 'as any' is no longer required
-        },
+        sessionId,
+        userId,
+        function: requiredFunction,
       },
     });
 

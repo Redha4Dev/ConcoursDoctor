@@ -345,6 +345,7 @@ export const getSessionStaff = async (sessionId: string, func?: string) => {
           specialization: true,
         },
       },
+      subject: { select: { id: true, name: true } },
     },
     orderBy: { assignedAt: "asc" },
   });
@@ -362,23 +363,37 @@ export const assignStaff = async (
   if (!user) throw new AppError("User not found", 404);
   if (!user.isActive) throw new AppError("Cannot assign inactive user", 400);
 
-  const existing = await identityDb.sessionStaff.findUnique({
+  // For CORRECTOR: validate that subjectId belongs to this session
+  if (dto.function === "CORRECTOR") {
+    const subject = await identityDb.subject.findFirst({
+      where: { id: dto.subjectId, sessionId },
+    });
+    if (!subject)
+      throw new AppError("Subject not found in this session", 404);
+  }
+
+  // Duplicate guard — uses findFirst because the unique index is now 4 columns
+  // (sessionId, userId, function, subjectId) and subjectId may be null
+  const existing = await identityDb.sessionStaff.findFirst({
     where: {
-      sessionId_userId_function: {
-        sessionId,
-        userId: dto.userId,
-        function: dto.function,
-      },
+      sessionId,
+      userId: dto.userId,
+      function: dto.function,
+      subjectId: dto.subjectId ?? null,
     },
   });
   if (existing)
-    throw new AppError("User already assigned with this function", 409);
+    throw new AppError(
+      "User already assigned to this subject with this function",
+      409,
+    );
 
   return identityDb.sessionStaff.create({
     data: {
       sessionId,
       userId: dto.userId,
       function: dto.function,
+      subjectId: dto.subjectId ?? null,
       assignedBy,
     },
     include: {
@@ -391,6 +406,7 @@ export const assignStaff = async (
           role: true,
         },
       },
+      subject: { select: { id: true, name: true } },
     },
   });
 };
@@ -399,16 +415,18 @@ export const removeStaff = async (
   sessionId: string,
   userId: string,
   func: string,
+  subjectId?: string,
 ) => {
   const functionName = parseSessionFunction(func);
 
-  const record = await identityDb.sessionStaff.findUnique({
+  // findFirst because the named 3-field unique index no longer exists —
+  // the key is now (sessionId, userId, function, subjectId)
+  const record = await identityDb.sessionStaff.findFirst({
     where: {
-      sessionId_userId_function: {
-        sessionId,
-        userId,
-        function: functionName,
-      },
+      sessionId,
+      userId,
+      function: functionName,
+      subjectId: subjectId ?? null,
     },
   });
   if (!record) throw new AppError("Staff assignment not found", 404);
