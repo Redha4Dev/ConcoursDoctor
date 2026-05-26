@@ -28,10 +28,28 @@ export const UpdateSessionSpecializationSchema = z.object({
 });
 
 // Session staff
-export const AssignStaffSchema = z.object({
-  userId: z.string().uuid("Invalid user ID"),
-  function: z.enum(["CORRECTOR", "JURY_MEMBER", "SURVEILLANT", "AUDITOR"]),
-});
+export const AssignStaffSchema = z
+  .object({
+    userId: z.string().uuid("Invalid user ID"),
+    function: z.enum(["CORRECTOR", "JURY_MEMBER", "SURVEILLANT", "AUDITOR"]),
+    subjectId: z.string().uuid("Invalid subject ID").optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.function === "CORRECTOR" && !data.subjectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["subjectId"],
+        message: "subjectId is required when function is CORRECTOR",
+      });
+    }
+    if (data.function !== "CORRECTOR" && data.subjectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["subjectId"],
+        message: "subjectId must not be provided for non-CORRECTOR functions",
+      });
+    }
+  });
 
 export const CreateSubjectSchema = z.object({
   name: z.string().min(2),

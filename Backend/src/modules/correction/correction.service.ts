@@ -108,7 +108,7 @@ export const openCorrectionPhase = async (
   ipAddress?: string,
   userAgent?: string,
 ) => {
-  // ── 1. Fetch session and validate status ──────────────────────────────────
+  // ── 1. Fetch session and validate status ────────────────────────────────────────
   const session = await identityDb.competitionSession.findUnique({
     where: { id: sessionId },
     select: { id: true, status: true },
@@ -122,34 +122,17 @@ export const openCorrectionPhase = async (
     );
   }
 
-  // ── 2. Fetch correctors (SessionStaff with function = CORRECTOR) ──────────
-  const staffRecords = await identityDb.sessionStaff.findMany({
-    where: { sessionId, function: "CORRECTOR" },
-    select: { userId: true },
-    orderBy: { userId: "asc" }, // deterministic ordering
-  });
-
-  if (staffRecords.length < 2) {
-    throw new AppError(
-      `At least 2 correctors required (found: ${staffRecords.length})`,
-      400,
-    );
-  }
-
-  const correctorIds = staffRecords.map((s) => s.userId);
-
-  // ── 3. Fetch all subjects for this session ────────────────────────────────
+  // ── 2. Fetch all subjects for this session ──────────────────────────────────
   const subjects = await identityDb.subject.findMany({
     where: { sessionId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (subjects.length === 0) {
     throw new AppError("No subjects found for this session", 400);
   }
 
-  // ── 4. For each subject, apply sequential batching ────────────────────────
-  let totalAssignments = 0;
+  // ── 3. For each subject: validate correctors and build assignment data ─────────
   let totalCopies = 0;
   const assignmentData: Array<{
     copyId: string;
@@ -159,7 +142,28 @@ export const openCorrectionPhase = async (
     round: number;
   }> = [];
 
+  // Track per-subject corrector counts for the audit payload
+  const correctorCountBySubject: Record<string, number> = {};
+
   for (const subject of subjects) {
+    // Fetch correctors assigned specifically to THIS subject
+    const subjectStaff = await identityDb.sessionStaff.findMany({
+      where: { sessionId, function: "CORRECTOR", subjectId: subject.id },
+      select: { userId: true },
+      orderBy: { userId: "asc" }, // deterministic ordering
+    });
+
+    // Per-subject guard: each subject must have at least 2 correctors
+    if (subjectStaff.length < 2) {
+      throw new AppError(
+        `Subject "${subject.name}" has only ${subjectStaff.length} corrector(s) assigned; at least 2 are required per subject`,
+        400,
+      );
+    }
+
+    const correctorIds = subjectStaff.map((s) => s.userId);
+    correctorCountBySubject[subject.id] = correctorIds.length;
+
     // Fetch all copies for this subject, sorted deterministically
     const copies = await correctionDb.examCopy.findMany({
       where: { sessionId, subjectId: subject.id },
@@ -208,7 +212,7 @@ export const openCorrectionPhase = async (
     throw new AppError("No exam copies found for this session", 400);
   }
 
-  // ── 5. Persist assignments + mark copies as ASSIGNED ──────────────────────
+  // ── 4. Persist assignments + mark copies as ASSIGNED ───────────────────────
   await correctionDb.$transaction(async (tx) => {
     await tx.correctorAssignment.createMany({
       data: assignmentData,
@@ -221,15 +225,15 @@ export const openCorrectionPhase = async (
     });
   });
 
-  totalAssignments = assignmentData.length;
+  const totalAssignments = assignmentData.length;
 
-  // ── 6. Advance session status ─────────────────────────────────────────────
+  // ── 5. Advance session status ─────────────────────────────────────────────
   await identityDb.competitionSession.update({
     where: { id: sessionId },
     data: { status: "CORRECTION_OPEN" },
   });
 
-  // ── 7. Audit ──────────────────────────────────────────────────────────────
+  // ── 6. Audit ──────────────────────────────────────────────────────────────
   audit({
     userId,
     action: "CORRECTION_OPENED",
@@ -240,14 +244,14 @@ export const openCorrectionPhase = async (
     payload: {
       sessionId,
       copies: totalCopies,
-      correctors: correctorIds.length,
+      correctorsBySubject: correctorCountBySubject,
       assignmentsCreated: totalAssignments,
     },
   }).catch(() => {});
 
   return {
     copies: totalCopies,
-    correctors: correctorIds.length,
+    correctorsBySubject: correctorCountBySubject,
     assignmentsCreated: totalAssignments,
   };
 };
@@ -423,14 +427,19 @@ export const assignThirdCorrector = async (
     );
   }
 
-  // ── 2. Validate correctorId is a CORRECTOR in this session ────────────────
+  // ── 2. Validate correctorId is a CORRECTOR assigned to this copy's subject ───
   const staffRecord = await identityDb.sessionStaff.findFirst({
-    where: { sessionId, userId: correctorId, function: "CORRECTOR" },
+    where: {
+      sessionId,
+      userId: correctorId,
+      function: "CORRECTOR",
+      subjectId: copy.subjectId, // must match the subject of the copy in DISCREPANCY
+    },
   });
 
   if (!staffRecord) {
     throw new AppError(
-      "Corrector not found as a CORRECTOR in this session",
+      "Corrector is not assigned to the subject of this copy",
       400,
     );
   }

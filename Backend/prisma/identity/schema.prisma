@@ -206,19 +206,26 @@ model SessionSpecialization {
 
 // ─── SESSION STAFF ────────────────────────────────────────────────────────────
 // Assigns a user a contextual function within a specific session.
+// subjectId is nullable — required only when function = CORRECTOR.
+// A corrector can be assigned to multiple subjects in the same session
+// (one row per subject). Non-corrector functions always have subjectId = null.
 
 model SessionStaff {
-  id         String   @id @default(uuid())
+  id         String          @id @default(uuid())
   sessionId  String
   userId     String
   function   SessionFunction // non-nullable: a staff record must always have a function
-  assignedAt DateTime @default(now())
+  subjectId  String?         // nullable — set only when function = CORRECTOR
+  assignedAt DateTime        @default(now())
   assignedBy String
 
   session CompetitionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user    User               @relation(fields: [userId], references: [id])
+  subject Subject?           @relation(fields: [subjectId], references: [id])
 
-  @@unique([sessionId, userId, function])
+  // Four-column unique key: correctors can be on multiple subjects in the same session,
+  // but not twice on the same subject. Non-correctors are unique on (sessionId, userId, function, NULL).
+  @@unique([sessionId, userId, function, subjectId])
   @@map("session_staff")
 }
 
@@ -233,12 +240,13 @@ model Subject {
   minimumGrade Float   @default(10)
   description  String?
 
-  attendanceRecords AttendanceRecord[]
-  anonymatMappings AnonymatMapping[]
-  session CompetitionSession @relation(fields: [sessionId], references: [id])
+  attendanceRecords          AttendanceRecord[]
+  anonymatMappings           AnonymatMapping[]
+  sessionStaff               SessionStaff[] // correctors assigned to this subject
+  session                    CompetitionSession @relation(fields: [sessionId], references: [id])
+  roomSurveillantAssignments RoomSurveillantAssignment[]
 
   @@map("subjects")
-  roomSurveillantAssignments RoomSurveillantAssignment[]
 }
 
 // ─── GRADING CONFIG ───────────────────────────────────────────────────────────

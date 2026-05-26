@@ -409,14 +409,17 @@ export const assignStaff = asyncHandler(async (req: Request, res: Response) => {
 export const removeStaff = asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const userId = req.params.userId as string;
-  const func = req.params.function as string; // Assuming 'function' is passed as a route param
+  const func = req.params.function as string;
+  // For CORRECTOR removals, caller must supply ?subjectId=<uuid> to identify
+  // which subject assignment to remove (a corrector can be on multiple subjects)
+  const subjectId = req.query.subjectId as string | undefined;
 
   if (!id || !userId || !func) {
     res.status(400);
     throw new Error("Session ID, User ID, and Function are required");
   }
 
-  await sessionsService.removeStaff(id, userId, func);
+  await sessionsService.removeStaff(id, userId, func, subjectId);
 
   // ✅ AUDIT
   audit({
@@ -426,7 +429,7 @@ export const removeStaff = asyncHandler(async (req: Request, res: Response) => {
     entityId: userId, // Logging the affected user's ID
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"] as string,
-    payload: { removedUserId: userId, function: func },
+    payload: { removedUserId: userId, function: func, subjectId: subjectId ?? null },
   }).catch(() => {});
 
   res
