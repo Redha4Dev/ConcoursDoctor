@@ -144,3 +144,88 @@ export const anonymizeSession = async (sessionId: string) => {
     );
   }
 };
+
+// ─── READ-ONLY: Label-printing helpers (ANONYMAT_COMITE) ──────────────────────
+
+/**
+ * Returns all AnonymatMapping rows for a session, joined with the subject name.
+ * Ordered strictly by anonymousCode ASC for deterministic label printing.
+ */
+export const getAnonymizationCodes = async (sessionId: string) => {
+  const rows = await identityDb.anonymatMapping.findMany({
+    where: { sessionId },
+    select: {
+      qrCode: true,
+      anonymousCode: true,
+      subject: { select: { name: true } },
+    },
+    orderBy: { anonymousCode: "asc" },
+  });
+
+  return rows.map((r) => ({
+    qrCode: r.qrCode,
+    anonymousCode: r.anonymousCode,
+    subjectName: r.subject.name,
+  }));
+};
+
+/**
+ * Look up a single mapping by either qrCode or anonymousCode.
+ * Exactly one of the two query fields must be provided (enforced in the controller).
+ */
+export const lookupCode = async (
+  sessionId: string,
+  query: { qrCode?: string; anonymousCode?: string },
+) => {
+  const row = await identityDb.anonymatMapping.findFirst({
+    where: {
+      sessionId,
+      ...(query.qrCode
+        ? { qrCode: query.qrCode }
+        : { anonymousCode: query.anonymousCode }),
+    },
+    select: {
+      qrCode: true,
+      anonymousCode: true,
+      subject: { select: { name: true } },
+    },
+  });
+
+  if (!row) throw new AppError("Mapping not found", 404);
+
+  return {
+    qrCode: row.qrCode,
+    anonymousCode: row.anonymousCode,
+    subjectName: row.subject.name,
+  };
+};
+
+/**
+ * Returns total mapping count and a per-subject breakdown for a session.
+ */
+export const getAnonymizationStats = async (sessionId: string) => {
+  const [total, grouped] = await Promise.all([
+    identityDb.anonymatMapping.count({ where: { sessionId } }),
+    identityDb.anonymatMapping.groupBy({
+      by: ["subjectId"],
+      where: { sessionId },
+      _count: { _all: true },
+    }),
+  ]);
+
+  // Resolve subject names in one query
+  const subjectIds = grouped.map((g) => g.subjectId);
+  const subjects = await identityDb.subject.findMany({
+    where: { id: { in: subjectIds } },
+    select: { id: true, name: true },
+  });
+  const subjectMap = new Map(subjects.map((s) => [s.id, s.name]));
+
+  const bySubject = grouped.map((g) => ({
+    subjectName: subjectMap.get(g.subjectId) ?? g.subjectId,
+    count: g._count._all,
+  }));
+
+  return { total, bySubject };
+};
+

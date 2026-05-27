@@ -21,6 +21,7 @@ info:
     - **JURY_MEMBER** — Reviews deliberation results for a specific session.
     - **SURVEILLANT** — Records attendance during a specific session.
     - **AUDITOR** — Read-only session audit function.
+    - **ANONYMAT_COMITE** — Physical paper anonymization committee; read-only access to code mappings.
 
     ## Change Log
     - **2026-05-23** — Updated schemas and endpoints based on recent code changes.
@@ -59,6 +60,8 @@ tags:
     description: Attendance scanning, room candidate views, summaries, and locking
   - name: Correction
     description: Exam grading, anonymous copy evaluation, and coordinator discrepancy management
+  - name: Anonymization
+    description: Physical paper label-printing helpers — code listing, single-code lookup, and per-subject statistics
 
 # ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
 components:
@@ -123,7 +126,7 @@ components:
 
     SessionFunction:
       type: string
-      enum: [CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR]
+      enum: [CORRECTOR, JURY_MEMBER, SURVEILLANT, AUDITOR, ANONYMAT_COMITE]
 
     SessionStatus:
       type: string
@@ -5038,3 +5041,188 @@ paths:
           description: Forbidden — Admin or Coordinator only
         "404":
           description: Copy or session not found
+
+  # ══ ANONYMIZATION ════════════════════════════════════════════════════════════
+
+  /api/v1/anonymization/{sessionId}/codes:
+    get:
+      summary: List all anonymization codes for a session
+      description: |
+        Returns every `AnonymatMapping` row for the given session, joined with
+        the subject name. Results are ordered strictly by `anonymousCode` ASC
+        to support deterministic physical label printing.
+
+        **Access:** `ANONYMAT_COMITE` session function, or global `ADMIN` / `COORDINATOR`.
+      tags: [Anonymization]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Array of anonymization code mappings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            qrCode:
+                              type: string
+                              example: copy-042
+                            anonymousCode:
+                              type: string
+                              example: DOCT-2025/2026-A3F9
+                            subjectName:
+                              type: string
+                              example: Génie Logiciel
+        "401":
+          description: Not authenticated
+        "403":
+          description: |
+            Forbidden — requires `ANONYMAT_COMITE` session function,
+            or global `ADMIN` / `COORDINATOR` role
+        "404":
+          description: Session not found
+
+  /api/v1/anonymization/{sessionId}/lookup:
+    get:
+      summary: Look up a single mapping by QR code or anonymous code
+      description: |
+        Resolves one `AnonymatMapping` record identified by **either** its
+        `qrCode` or its `anonymousCode` — pass exactly one of the two query
+        parameters. Supplying both or neither returns `400`.
+
+        **Access:** `ANONYMAT_COMITE` session function, or global `ADMIN` / `COORDINATOR`.
+      tags: [Anonymization]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+        - name: qrCode
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: |
+            The QR / anonymity code printed on the physical copy envelope.
+            Mutually exclusive with `anonymousCode`.
+          example: copy-042
+        - name: anonymousCode
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: |
+            The randomly generated anonymous identifier assigned during anonymization.
+            Mutually exclusive with `qrCode`.
+          example: DOCT-2025/2026-A3F9
+      responses:
+        "200":
+          description: Mapping resolved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          qrCode:
+                            type: string
+                            example: copy-042
+                          anonymousCode:
+                            type: string
+                            example: DOCT-2025/2026-A3F9
+                          subjectName:
+                            type: string
+                            example: Génie Logiciel
+        "400":
+          description: |
+            Both `qrCode` and `anonymousCode` were supplied, or neither was supplied
+        "401":
+          description: Not authenticated
+        "403":
+          description: |
+            Forbidden — requires `ANONYMAT_COMITE` session function,
+            or global `ADMIN` / `COORDINATOR` role
+        "404":
+          description: Mapping not found for the given code within this session
+
+  /api/v1/anonymization/{sessionId}/stats:
+    get:
+      summary: Anonymization statistics for a session
+      description: |
+        Returns the total number of `AnonymatMapping` rows for the session and
+        a per-subject breakdown (subject name + count).
+
+        **Access:** `ANONYMAT_COMITE` session function, or global `ADMIN` / `COORDINATOR`.
+      tags: [Anonymization]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Anonymization statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                            description: Total number of anonymat mappings for this session
+                            example: 120
+                          bySubject:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                subjectName:
+                                  type: string
+                                  example: Génie Logiciel
+                                count:
+                                  type: integer
+                                  example: 40
+        "401":
+          description: Not authenticated
+        "403":
+          description: |
+            Forbidden — requires `ANONYMAT_COMITE` session function,
+            or global `ADMIN` / `COORDINATOR` role
+        "404":
+          description: Session not found
