@@ -98,9 +98,12 @@ const checkAndTriggerDeliberation = async (
 
 /**
  * Opens the correction phase for a session:
- * 1. Validates preconditions (status, correctors, copies)
- * 2. Assigns 2 correctors per copy per subject using sequential batching
- * 3. Transitions session status → CORRECTION_OPEN
+ * 1. Validates preconditions (status, correctors ≥ 4 per subject, copies)
+ * 2. Chunks copies into C equal groups (C = corrector count per subject)
+ * 3. Assigns 2 correctors per copy using a 4-group rotation matrix:
+ *      Round 1 → correctorIds[ chunkIdx % C ]
+ *      Round 2 → correctorIds[ (chunkIdx + 1) % C ]   ← +1 shift guarantees no repeats
+ * 4. Transitions session status → CORRECTION_OPEN
  */
 export const openCorrectionPhase = async (
   sessionId: string,
@@ -108,7 +111,7 @@ export const openCorrectionPhase = async (
   ipAddress?: string,
   userAgent?: string,
 ) => {
-  // ── 1. Fetch session and validate status ────────────────────────────────────────
+  // ── 1. Fetch session and validate status ────────────────────────────────────
   const session = await identityDb.competitionSession.findUnique({
     where: { id: sessionId },
     select: { id: true, status: true },
@@ -132,7 +135,7 @@ export const openCorrectionPhase = async (
     throw new AppError("No subjects found for this session", 400);
   }
 
-  // ── 3. For each subject: validate correctors and build assignment data ─────────
+  // ── 3. For each subject: validate correctors and build assignment data ──────
   let totalCopies = 0;
   const assignmentData: Array<{
     copyId: string;
@@ -146,25 +149,32 @@ export const openCorrectionPhase = async (
   const correctorCountBySubject: Record<string, number> = {};
 
   for (const subject of subjects) {
-    // Fetch correctors assigned specifically to THIS subject
+    // Fetch correctors assigned specifically to THIS subject, ordered
+    // deterministically by userId ASC to guarantee a stable rotation matrix.
     const subjectStaff = await identityDb.sessionStaff.findMany({
       where: { sessionId, function: "CORRECTOR", subjectId: subject.id },
       select: { userId: true },
-      orderBy: { userId: "asc" }, // deterministic ordering
+      orderBy: { userId: "asc" }, // deterministic ordering ensures reproducible chunk→corrector mapping
     });
 
-    // Per-subject guard: each subject must have at least 2 correctors
-    if (subjectStaff.length < 2) {
+    // ── Strict per-subject guard: the 4-corrector rotation matrix requires
+    //    at least 4 correctors so that every copy is reviewed by 2 distinct
+    //    people AND 2 unused correctors remain available for round-3 arbitration.
+    const subjectCorrectorIds = subjectStaff.map((s) => s.userId);
+    if (subjectCorrectorIds.length < 4) {
       throw new AppError(
-        `Subject "${subject.name}" has only ${subjectStaff.length} corrector(s) assigned; at least 2 are required per subject`,
+        `Cannot open correction: Subject "${subject.name}" requires a minimum of 4 assigned correctors. Found: ${subjectCorrectorIds.length}`,
         400,
       );
     }
 
-    const correctorIds = subjectStaff.map((s) => s.userId);
-    correctorCountBySubject[subject.id] = correctorIds.length;
+    correctorCountBySubject[subject.id] = subjectCorrectorIds.length;
 
-    // Fetch all copies for this subject, sorted deterministically
+    // Total correctors for this subject — drives the rotation modulus
+    const C = subjectCorrectorIds.length; // e.g. 4 → 4-group matrix
+
+    // Fetch all copies for this subject, sorted deterministically so the
+    // chunk→corrector mapping is stable across re-runs.
     const copies = await correctionDb.examCopy.findMany({
       where: { sessionId, subjectId: subject.id },
       select: { id: true, anonymousCode: true },
@@ -174,20 +184,28 @@ export const openCorrectionPhase = async (
     if (copies.length === 0) continue;
 
     totalCopies += copies.length;
-    const C = correctorIds.length;
+
+    // ── Chunk copies into C equal groups.
+    //    batchSize = ⌈n / C⌉ so that every corrector gets at most one chunk.
+    //    Example: 10 copies, C=4 → batchSize=3 → chunks [3,3,3,1].
     const batchSize = Math.ceil(copies.length / C);
 
-    // Slice copies into chunks of batchSize
     const chunks: (typeof copies)[] = [];
     for (let i = 0; i < copies.length; i += batchSize) {
       chunks.push(copies.slice(i, i + batchSize));
     }
 
-    // Round 1: chunk[i] → corrector[i]
-    // Round 2: chunk[i] → corrector[(i + 1) % C]  (shift by one — no repeat)
+    // ── 4-group rotation matrix assignment:
+    //    Round 1: chunk[chunkIdx] → correctorIds[ chunkIdx % C ]
+    //    Round 2: chunk[chunkIdx] → correctorIds[ (chunkIdx + 1) % C ]
+    //
+    //    The +1 shift ensures the Round-1 and Round-2 correctors are ALWAYS
+    //    different — a corrector can never grade the same paper twice.
     for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
-      const r1Corrector = correctorIds[chunkIdx % C];
-      const r2Corrector = correctorIds[(chunkIdx + 1) % C];
+      // Round 1 corrector: maps directly to this chunk's index in the pool
+      const r1Corrector = subjectCorrectorIds[chunkIdx % C];
+      // Round 2 corrector: shifted by 1 — wraps around via modulo
+      const r2Corrector = subjectCorrectorIds[(chunkIdx + 1) % C];
 
       for (const copy of chunks[chunkIdx]) {
         assignmentData.push({
@@ -399,19 +417,28 @@ export const getDiscrepancies = async (sessionId: string) => {
 /**
  * Assigns a third corrector to a copy in DISCREPANCY status.
  * Only ADMIN or COORDINATOR can call this.
+ *
+ * Eligibility rule (4-corrector rotation matrix contract):
+ *   The chosen corrector MUST be from the same subject pool AND must NOT
+ *   be either the Round-1 or Round-2 corrector for this specific copy.
+ *   With ≥ 4 correctors per subject this always leaves at least 2 eligible
+ *   choices, giving the coordinator meaningful selection freedom.
  */
 export const assignThirdCorrector = async (
   sessionId: string,
   copyId: string,
-  correctorId: string,
+  correctorId: string, // the proposed third corrector (thirdCorrectorId in the spec)
   userId: string,
   ipAddress?: string,
   userAgent?: string,
 ) => {
-  // ── 1. Validate copy status ───────────────────────────────────────────────
+  // ── 1. Fetch the target ExamCopy and verify it is in DISCREPANCY status ───
+  //    We include the existing CorrectorAssignment rows so we can identify
+  //    which correctors own Round 1 and Round 2 for this specific copy.
   const copy = await correctionDb.examCopy.findUnique({
     where: { id: copyId },
     include: {
+      // assignments carries round + correctorId for every round on this copy
       assignments: { select: { correctorId: true, round: true } },
     },
   });
@@ -420,6 +447,7 @@ export const assignThirdCorrector = async (
   if (copy.sessionId !== sessionId) {
     throw new AppError("Copy does not belong to this session", 400);
   }
+  // Status guard — only DISCREPANCY copies may receive a third corrector
   if (copy.status !== "DISCREPANCY") {
     throw new AppError(
       `Copy must be in DISCREPANCY status (current: ${copy.status})`,
@@ -427,32 +455,49 @@ export const assignThirdCorrector = async (
     );
   }
 
-  // ── 2. Validate correctorId is a CORRECTOR assigned to this copy's subject ───
+  // ── 2. Identify the Round-1 and Round-2 correctors for this copy ──────────
+  //    We resolve from CorrectorAssignment records (set during openCorrectionPhase)
+  //    rather than CorrectionGrade so the check works even if one corrector
+  //    has not yet submitted their grade.
+  const round1Assignment = copy.assignments.find((a) => a.round === 1);
+  const round2Assignment = copy.assignments.find((a) => a.round === 2);
+
+  // Defensive: both rounds must exist for a copy to be in DISCREPANCY
+  const round1CorrectorId = round1Assignment?.correctorId ?? null;
+  const round2CorrectorId = round2Assignment?.correctorId ?? null;
+
+  // ── 3. Validate proposed third corrector against the subject pool ──────────
+  //    They must hold a SessionStaff record with function=CORRECTOR for the
+  //    same subjectId as this copy — i.e. they are in the subject's pool.
   const staffRecord = await identityDb.sessionStaff.findFirst({
     where: {
       sessionId,
       userId: correctorId,
       function: "CORRECTOR",
-      subjectId: copy.subjectId, // must match the subject of the copy in DISCREPANCY
+      subjectId: copy.subjectId, // must match the subject of the discrepancy copy
     },
   });
 
   if (!staffRecord) {
+    // Proposed corrector is not in the correct subject pool at all
     throw new AppError(
-      "Corrector is not assigned to the subject of this copy",
+      "Third corrector must be an unassigned corrector from the same subject pool",
       400,
     );
   }
 
-  // ── 3. Validate corrector not already assigned to this copy ───────────────
-  const alreadyAssigned = copy.assignments.some(
-    (a) => a.correctorId === correctorId,
-  );
-  if (alreadyAssigned) {
-    throw new AppError("Corrector is already assigned to this copy", 400);
+  // ── 4. Enforce the "unused corrector" constraint ──────────────────────────
+  //    The third corrector MUST NOT be the same person who graded Round 1
+  //    or Round 2, regardless of whether they are in the subject pool.
+  if (correctorId === round1CorrectorId || correctorId === round2CorrectorId) {
+    // The requested corrector already touched this paper in a previous round
+    throw new AppError(
+      "Third corrector must be an unassigned corrector from the same subject pool",
+      400,
+    );
   }
 
-  // ── 4. Create round-3 assignment ──────────────────────────────────────────
+  // ── 5. Create round-3 assignment ──────────────────────────────────────────
   await correctionDb.correctorAssignment.create({
     data: {
       copyId,
@@ -463,7 +508,7 @@ export const assignThirdCorrector = async (
     },
   });
 
-  // ── 5. Audit ──────────────────────────────────────────────────────────────
+  // ── 6. Audit ──────────────────────────────────────────────────────────────
   audit({
     userId,
     action: "THIRD_CORRECTOR_ASSIGNED",

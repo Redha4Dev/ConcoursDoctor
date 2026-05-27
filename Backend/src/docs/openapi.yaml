@@ -4837,15 +4837,25 @@ paths:
     post:
       summary: Open correction phase
       description: |
-        Transitions the session status to CORRECTION_OPEN and automatically assigns
-        correctors to anonymous copies using a per-subject sequential batching algorithm.
+        Transitions the session status to `CORRECTION_OPEN` and automatically assigns
+        correctors to anonymous copies using a strict **4-group rotation matrix** per subject.
 
         **Prerequisites:**
         - Session must be in `ANONYMIZED` status.
-        - Each subject must have at least **2 correctors** pre-assigned via
+        - Each subject must have **at least 4 correctors** pre-assigned via
           `POST /sessions/{id}/staff` with `subjectId` matching that subject.
+          This minimum is required by the rotation matrix: 2 correctors grade every
+          copy in Rounds 1 & 2, and at least 2 more must remain available for
+          Round-3 arbitration on any discrepancy that may arise.
         - Correctors assigned to subject A are **only** distributed over copies
           for subject A — they never touch another subject's copies.
+
+        **Batching algorithm:**
+        1. Correctors for each subject are sorted deterministically by `userId ASC`.
+        2. Copies are split into `C` equal chunks (where `C` = total corrector count).
+        3. Each chunk `i` is assigned:
+           - **Round 1** → `correctorIds[ i % C ]`
+           - **Round 2** → `correctorIds[ (i + 1) % C ]`  *(+1 shift — no corrector ever grades the same paper twice)*
 
         Admin or Coordinator only.
       tags: [Correction]
@@ -4872,7 +4882,7 @@ paths:
         "400":
           description: |
             - Session is not in ANONYMIZED status
-            - One or more subjects have fewer than 2 correctors assigned
+            - One or more subjects have fewer than **4** correctors assigned
             - No subjects configured for the session
             - No exam copies found
         "401":
@@ -4954,14 +4964,20 @@ paths:
     post:
       summary: Assign third corrector to discrepancy copy
       description: |
-        Assigns a third corrector for round-3 grading of a copy in DISCREPANCY status.
+        Assigns a third corrector for round-3 grading of a copy in `DISCREPANCY` status.
 
-        **Constraints:**
+        **Eligibility rules (4-corrector rotation matrix contract):**
         - The copy must be in `DISCREPANCY` status.
-        - The chosen corrector must be assigned to the **same subject** as this copy
-          (i.e. have a `SessionStaff` record with `function=CORRECTOR` and
+        - The chosen corrector must belong to the **same subject pool** as this copy
+          (i.e. hold a `SessionStaff` record with `function=CORRECTOR` and
           `subjectId` matching the copy's subject).
-        - The corrector must not have already graded rounds 1 or 2 of this copy.
+        - The chosen corrector must **not** be the Round-1 corrector for this copy.
+        - The chosen corrector must **not** be the Round-2 corrector for this copy.
+
+        Because each subject is required to have ≥ 4 correctors, this rule always
+        leaves the coordinator at least **2 eligible choices** for round-3 arbitration.
+        If either check fails, a `400` error is returned with the message:
+        *"Third corrector must be an unassigned corrector from the same subject pool"*
 
         Admin or Coordinator only.
       tags: [Correction]
