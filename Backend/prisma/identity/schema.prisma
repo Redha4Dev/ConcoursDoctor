@@ -22,6 +22,7 @@ enum SessionFunction {
   CORRECTOR
   JURY_MEMBER
   AUDITOR
+  ANONYMAT_COMITE // NEW: Dedicated role for handling physical paper anonymization
 }
 
 enum SessionStatus {
