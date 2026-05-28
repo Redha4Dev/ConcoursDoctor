@@ -311,16 +311,16 @@ export const addSessionSpecialization = asyncHandler(
 export const updateSessionSpecialization = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const specializationId = req.params.specializationId as string;
+    const specId = req.params.specId as string;
 
-    if (!id || !specializationId) {
+    if (!id || !specId) {
       res.status(400);
       throw new Error("Session ID and Specialization ID are required");
     }
 
     const result = await sessionsService.updateSessionSpecialization(
       id,
-      specializationId,
+      specId,
       req.body,
     );
 
@@ -329,7 +329,7 @@ export const updateSessionSpecialization = asyncHandler(
       userId: req.user!.id,
       action: "SESSION_SPECIALIZATION_UPDATED",
       entity: "SESSION_SPECIALIZATION",
-      entityId: specializationId,
+      entityId: specId,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
       payload: { fieldsChanged: Object.keys(req.body) },
@@ -346,16 +346,16 @@ export const updateSessionSpecialization = asyncHandler(
 export const removeSessionSpecialization = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const specializationId = req.params.specializationId as string;
+    const specId = req.params.specId as string;
 
-    if (!id || !specializationId) {
+    if (!id || !specId) {
       res.status(400);
       throw new Error("Session ID and Specialization ID are required");
     }
 
     const result = await sessionsService.removeSessionSpecialization(
       id,
-      specializationId,
+      specId,
     );
 
     // ✅ AUDIT
@@ -363,10 +363,10 @@ export const removeSessionSpecialization = asyncHandler(
       userId: req.user!.id,
       action: "SESSION_SPECIALIZATION_REMOVED",
       entity: "SESSION_SPECIALIZATION",
-      entityId: specializationId,
+      entityId: specId,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
-      payload: { specializationId },
+      payload: { specId },
     }).catch(() => {});
 
     res.status(200).json({
@@ -429,7 +429,11 @@ export const removeStaff = asyncHandler(async (req: Request, res: Response) => {
     entityId: userId, // Logging the affected user's ID
     ipAddress: req.ip,
     userAgent: req.headers["user-agent"] as string,
-    payload: { removedUserId: userId, function: func, subjectId: subjectId ?? null },
+    payload: {
+      removedUserId: userId,
+      function: func,
+      subjectId: subjectId ?? null,
+    },
   }).catch(() => {});
 
   res
