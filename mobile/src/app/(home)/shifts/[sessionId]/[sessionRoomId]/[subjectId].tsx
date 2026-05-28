@@ -102,7 +102,6 @@ export default function CandidateListScreen() {
     if (scanned || !activeScanningId) return;
 
     setScanned(true);
-    setIsScannerVisible(false);
     setIsReadyToScan(false);
 
     const targetCandidateId = activeScanningId;
@@ -129,13 +128,10 @@ export default function CandidateListScreen() {
         return c;
       })
     );
-
-    setActiveScanningId(null);
   };
 
   // --- MANUALLY TOGGLE STATUS ---
   const toggleStatus = (id) => {
-    // FIXED: Calculate the new state FIRST, outside of the setStates to avoid React update race conditions
     const candidate = candidates.find((c) => c.candidateId === id);
     if (!candidate) return;
 
@@ -223,6 +219,11 @@ export default function CandidateListScreen() {
     return nameMatch || regMatch;
   });
 
+  // Find info of currently scanning candidate for validation view
+  const activeCandidate = candidates.find((c) => c.candidateId === activeScanningId);
+  const activeCandidateName = activeCandidate ? `${activeCandidate.firstName || ""} ${activeCandidate.lastName || ""}`.trim() : "";
+  const activeCandidateReg = activeCandidate ? activeCandidate.registrationNumber || "N/A" : "";
+
   return (
     <SafeAreaView
       className="flex-1 bg-[#F8F9FA]"
@@ -278,7 +279,7 @@ export default function CandidateListScreen() {
         </View>
       )}
 
-      {/* --- SCROLL LIST (Wrapped in flex-1 to push the bottom bar down) --- */}
+      {/* --- SCROLL LIST --- */}
       <View className="flex-1">
         {loading ? (
           <View className="flex-1 justify-center items-center">
@@ -344,7 +345,7 @@ export default function CandidateListScreen() {
         )}
       </View>
 
-      {/* --- FIXED SUBMIT BUTTON (No longer absolute, sits naturally at the bottom) --- */}
+      {/* --- FIXED SUBMIT BUTTON --- */}
       {pendingScans.length > 0 && (
         <View className="px-6 py-4 bg-white border-t border-[#F3F4F6] shadow-sm">
           <TouchableOpacity
@@ -360,7 +361,7 @@ export default function CandidateListScreen() {
         </View>
       )}
 
-      {/* --- CAMERA OVERLAY MODAL --- */}
+      {/* --- CAMERA SCANNING MODAL --- */}
       <Modal
         visible={isScannerVisible}
         animationType="slide"
@@ -372,9 +373,10 @@ export default function CandidateListScreen() {
           setIsScannerVisible(false);
           setIsReadyToScan(false);
           setActiveScanningId(null);
+          setScanned(false);
         }}
       >
-        <View style={StyleSheet.absoluteFillObject} className="bg-black">
+        <View style={StyleSheet.absoluteFillObject} className="bg-black justify-center items-center">
           {isReadyToScan && (
             <CameraView
               style={StyleSheet.absoluteFillObject}
@@ -385,34 +387,108 @@ export default function CandidateListScreen() {
             />
           )}
 
-          <SafeAreaView
-            className="flex-1 justify-between"
-            style={{ backgroundColor: "transparent" }}
-          >
-            <View className="p-6 flex-row justify-between items-center bg-[#111827]/90 mx-4 mt-4 rounded-2xl">
-              <Text className="text-white font-bold text-[18px]">
-                {i18n.t("Align QR Code")}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setIsScannerVisible(false);
-                  setIsReadyToScan(false);
-                  setActiveScanningId(null);
-                }}
-                className="p-2 bg-gray-800 rounded-full"
-              >
-                <Ionicons name="close" size={24} color="white" />
-              </TouchableOpacity>
-            </View>
+          {/* --- FLOATING HEADER CARD PANEL --- */}
+          <SafeAreaView className="absolute top-0 left-0 right-0 p-6 flex-row items-center z-10" edges={["top"]}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                setIsScannerVisible(false);
+                setIsReadyToScan(false);
+                setActiveScanningId(null);
+                setScanned(false);
+              }}
+              className="w-12 h-12 bg-white/20 rounded-full items-center justify-center mr-3"
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
 
-            <View className="items-center justify-center flex-1">
-              <View style={styles.targetFrame} />
-              <Text className="text-white text-center font-semibold text-[14px] mt-6 mx-10 bg-black/70 px-4 py-2.5 rounded-xl">
-                {i18n.t("Place the candidate code within the lines to scan.")}
+            <View className="flex-1 bg-[#2D3139]/90 rounded-[24px] p-5 shadow-lg border border-gray-700/40">
+              <Text className="text-white text-[20px] font-extrabold tracking-tight">
+                {i18n.t("Computer Science")}
               </Text>
+              <Text className="text-gray-300 text-[13px] font-semibold mt-0.5">
+                {i18n.t("Subject: ACSI")}
+              </Text>
+              <View className="flex-row items-center mt-3">
+                <View className="bg-[#EEEBFF] px-3 py-1 rounded-full mr-2">
+                  <Text className="text-[#311B92] text-[11px] font-black">
+                    {candidates.length} {i18n.t("Candidates")}
+                  </Text>
+                </View>
+                <View className="bg-gray-600/80 px-3 py-1 rounded-full">
+                  <Text className="text-gray-200 text-[11px] font-bold">
+                    {i18n.t("Session 09:00 AM")}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View className="h-10" />
           </SafeAreaView>
+
+          {/* --- CENTER SCANNING TARGET FRAMES WITH CORNERS --- */}
+          <View style={styles.scannerTarget}>
+            <View style={[styles.corner, styles.topLeft]} />
+            <View style={[styles.corner, styles.topRight]} />
+            <View style={[styles.corner, styles.bottomLeft]} />
+            <View style={[styles.corner, styles.bottomRight]} />
+          </View>
+
+          {/* --- ALIGNMENT NOTIFICATION CAPSULE --- */}
+          <View className="mt-8 border border-gray-600/50 rounded-full px-6 py-2.5 bg-black/40">
+            <Text className="text-white text-[12px] font-bold tracking-widest text-center uppercase">
+              {i18n.t("Align QR Code within the frame")}
+            </Text>
+          </View>
+
+          {/* --- ATTENDANCE CONFIRMED BOTTOM SHEET MODAL --- */}
+          {scanned && (
+            <View className="absolute inset-0 bg-black/50 justify-end z-20">
+              <View className="bg-[#D6D6D6] rounded-t-[40px] px-6 pt-3 pb-8 items-center shadow-2xl">
+                {/* Visual Top Handle Drag Bar */}
+                <View className="w-12 h-1.5 bg-gray-400/70 rounded-full mb-6" />
+
+                {/* Checked Success Badge */}
+                <View className="w-16 h-16 bg-white rounded-[20px] justify-center items-center shadow-sm mb-4">
+                  <Ionicons name="checkmark-circle" size={44} color="#311B92" />
+                </View>
+
+                {/* Title */}
+                <Text className="text-[22px] font-black text-[#111827] mb-6 tracking-tight">
+                  {i18n.t("Attendance Confirmed")}
+                </Text>
+
+                {/* Info Nested Block Layout */}
+                <View className="w-full bg-[#C9C9C9]/80 rounded-[28px] p-4 mb-6 border border-gray-300/40">
+                  <Text className="text-[12px] font-extrabold text-gray-500 mb-2 uppercase tracking-wider text-center">
+                    {i18n.t("Candidate Full Name")}
+                  </Text>
+                  <View className="bg-[#ECECEC] rounded-[20px] p-4 items-center border border-white/60 shadow-sm">
+                    <Text className="text-[19px] font-black text-[#311B92] mb-1 text-center">
+                      {activeCandidateName}
+                    </Text>
+                    <Text className="text-[13px] font-bold text-gray-500 text-center">
+                      {i18n.t("REG:")} {activeCandidateReg}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Action CTA Button */}
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    setIsScannerVisible(false);
+                    setIsReadyToScan(false);
+                    setActiveScanningId(null);
+                    setScanned(false);
+                  }}
+                  className="bg-[#2B1192] w-full py-4 rounded-[20px] justify-center items-center shadow-md"
+                >
+                  <Text className="text-white font-black text-[16px]">
+                    {i18n.t("Confirm & Next")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -420,13 +496,45 @@ export default function CandidateListScreen() {
 }
 
 const styles = StyleSheet.create({
-  targetFrame: {
-    width: 260,
-    height: 260,
-    borderWidth: 3,
-    borderColor: "#A594FF",
-    backgroundColor: "transparent",
-    borderRadius: 24,
-    borderStyle: "dashed",
+  scannerTarget: {
+    width: 270,
+    height: 270,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  corner: {
+    position: "absolute",
+    width: 35,
+    height: 35,
+    borderColor: "#6366F1", 
+  },
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 4,
+  },
+  topRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 4,
+  },
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 4,
+  },
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 4,
   },
 });
