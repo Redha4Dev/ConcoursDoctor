@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Text,
   View,
@@ -9,274 +9,156 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import api from "../../../utils/axios"; 
-import { i18n } from "../../../locales/i18n";
 import { useAuth } from "../../../providers/AuthProvider";
+import { i18n } from "../../../locales/i18n";
 
-export default function DashboardScreen() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ active: [], upcoming: [], past: [] });
-  const [error, setError] = useState(null);
-  const { user } = useAuth();
-  console.log(user);
+// Import your split UI dashboards
+import SurveillantDashboard from "@/components/dashboard/surveillant";
+import CommitteeDashboard from "@/components/dashboard/Committee";
 
-  // --- FETCH ASSIGNMENTS ---
-  useEffect(() => {
-    const fetchAssignments = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get("/api/v1/attendance/my-assignments");
-        console.log(response.data);
-        if (response.data && response.data.success) {
-          setData(response.data.data);
-        } else {
-          setError("Failed to parse data");
-        }
-      } catch (err) {
-        console.error("Error fetching assignments:", err);
-        setError("Network error or token expired");
-      } finally {
-        setLoading(false);
-      }
-    };
+export default function HomeIndexScreen() {
+  const { user, isLoading } = useAuth();
+  
+  // Local state to store the currently active session context selection
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
 
-    fetchAssignments();
-  }, []);
-
-  // --- DATE HELPER METHODS ---
-  const formatTime = (dateString) => {
-    if (!dateString) return "00:00 AM";
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const formatDateLabel = (dateString) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  // Extract primary dynamic active & upcoming sets
-  const activeSession =
-    data.active && data.active.length > 0 ? data.active[0] : null;
-  const upcomingShifts = data.upcoming || [];
-
-  // Static UI header fallback if there's no active/upcoming record yet
-  const todayLabel = formatDateLabel(new Date());
-
-  if (loading) {
+  // 1. Loading Guard State
+  if (isLoading || !user) {
     return (
-      <SafeAreaView className="flex-1 bg-[#F8F9FA] justify-center items-center">
+      <View className="flex-1 justify-center items-center bg-[#F8F9FA]">
         <ActivityIndicator size="large" color="#311B92" />
-      </SafeAreaView>
+      </View>
     );
   }
 
-  return (
-    <SafeAreaView
-      className="flex-1 bg-[#F8F9FA]"
-      edges={["top", "left", "right"]}
-    >
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
+  // 2. If an assignment is already selected, load the respective dynamic dashboard
+  if (selectedAssignment) {
+    const isCommittee = selectedAssignment.function === "ANONYMAT_COMITE";
+    
+    if (isCommittee) {
+      return (
+        <CommitteeDashboard 
+          assignment={selectedAssignment} 
+          onSwitchSession={() => setSelectedAssignment(null)} 
+        />
+      );
+    } else {
+      return (
+        <SurveillantDashboard 
+          assignment={selectedAssignment} 
+          onSwitchSession={() => setSelectedAssignment(null)} 
+        />
+      );
+    }
+  }
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 24, paddingBottom: 120 }}
+  // 3. Selection Screen Render (When selectedAssignment is null)
+  const assignments = user.sessionStaff || [];
+
+  return (
+    <SafeAreaView className="flex-1 bg-[#F8F9FA]" edges={["top", "left", "right"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
+      
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ padding: 24 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* --- HEADER SECTION --- */}
-        <View className="mb-6">
-          <Text className="text-[14px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">
-            {activeSession
-              ? formatDateLabel(activeSession.examDate)
-              : todayLabel}
-          </Text>
+        {/* Header Greeting */}
+        <View className="mb-8 mt-4">
           <Text className="text-[32px] font-extrabold text-[#1F2937] tracking-tight leading-tight">
-            {i18n.t("Good morning,")}{"\n"}Dr. {user.lastName}
+            {i18n.t("Welcome,")}{"\n"}Dr. {user.lastName || "Staff"}
+          </Text>
+          <Text className="text-[15px] font-medium text-[#6B7280] mt-2 leading-relaxed">
+            {i18n.t("Please choose your assigned role and session workflow to begin.")}
           </Text>
         </View>
 
-        {/* --- HERO ACTIVE CARD (RENDER CONDITIONALLY) --- */}
-        {activeSession ? (
-          <View>
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-[20px] font-black text-[#111827]">
-                {i18n.t("Next Assignment")}
-              </Text>
-              <View className="bg-[#EEEBFF] px-3 py-1 rounded-full">
-                <Text className="text-[#311B92] text-[12px] font-bold">
-                  {i18n.t("Status:")} {activeSession.sessionStatus}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              className="bg-[#311B92] rounded-[28px] p-6 mb-8"
-              style={{
-                shadowColor: "#311B92",
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.2,
-                shadowRadius: 20,
-                elevation: 8,
-              }}
-            >
-              <View className="flex-row justify-between items-start mb-4">
-                <View className="flex-1 pr-2">
-                  <Text className="text-[#9E8BFF] text-[12px] font-bold uppercase tracking-wider mb-1">
-                    {i18n.t("CURRENT SESSION")}
-                  </Text>
-                  <Text
-                    className="text-white text-[24px] font-black tracking-tight"
-                    numberOfLines={2}
-                  >
-                    {activeSession.sessionLabel}
-                  </Text>
-                </View>
-                <View className="bg-[#432CA3] p-3 rounded-2xl">
-                  <MaterialCommunityIcons
-                    name="laptop"
-                    size={24}
-                    color="#A594FF"
-                  />
-                </View>
-              </View>
-
-              <View className="flex-row mb-6 mt-2">
-                <View className="flex-1">
-                  <View className="flex-row items-center mb-1">
-                    <Ionicons name="time-outline" size={16} color="#A594FF" />
-                    <Text className="text-[#9E8BFF] text-[13px] font-semibold ml-1.5 uppercase">
-                      {i18n.t("Time")}
-                    </Text>
-                  </View>
-                  <Text className="text-white text-[17px] font-bold">
-                    {formatTime(activeSession.examDate)}
-                  </Text>
-                </View>
-
-                <View className="flex-1">
-                  <View className="flex-row items-center mb-1">
-                    <Ionicons
-                      name="business-outline"
-                      size={16}
-                      color="#A594FF"
-                    />
-                    <Text className="text-[#9E8BFF] text-[13px] font-semibold ml-1.5 uppercase">
-                      {i18n.t("Location")}
-                    </Text>
-                  </View>
-                  <Text
-                    className="text-white text-[16px] font-bold leading-tight"
-                    numberOfLines={2}
-                  >
-                    {`${activeSession.room?.name}, ${activeSession.room?.floor}`}
-                  </Text>
-                </View>
-              </View>
-
-              {/* FIXED: Added subject ID to the active session route */}
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() =>
-                  router.push(
-                    `/shifts/${activeSession.sessionId}/${activeSession.sessionRoomId}/${activeSession.subject?.id}`,
-                  )
-                }
-                className="bg-white py-4 rounded-[20px] flex-row items-center justify-center"
-              >
-                <Text className="text-[#311B92] text-[16px] font-extrabold mr-2">
-                  {i18n.t("Open Candidate List")} ({activeSession.candidateCount})
-                </Text>
-                <Ionicons name="arrow-forward" size={18} color="#311B92" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View className="bg-white rounded-[24px] p-6 items-center border border-[#E5E7EB] mb-8">
-            <MaterialCommunityIcons
-              name="calendar-blank"
-              size={32}
-              color="#9CA3AF"
-            />
-            <Text className="text-[#6B7280] font-bold text-[16px] mt-2">
-              {i18n.t("No active shifts scheduled today")}
-            </Text>
-          </View>
-        )}
-
-        {/* --- UPCOMING SHIFTS SECTION --- */}
-        <Text className="text-[20px] font-black text-[#111827] mb-4">
-          {i18n.t("Upcoming Shifts")}
+        {/* Assignments Group Wrapper */}
+        <Text className="text-[14px] font-black text-[#9CA3AF] uppercase tracking-widest mb-4">
+          {i18n.t("Available Assignments")} ({assignments.length})
         </Text>
 
-        {upcomingShifts.length > 0 ? (
-          upcomingShifts.map((shift) => (
-            <TouchableOpacity
-              key={shift.assignmentId}
-              activeOpacity={0.8}
-              // FIXED: Changed 'assignment' to 'shift' to match the loop variable
-              onPress={() =>
-                router.push(
-                  `/shifts/${shift.sessionId}/${shift.sessionRoomId}/${shift.subject?.id}`,
-                )
-              }
-              className="bg-white rounded-[24px] p-5 border border-[#E5E7EB] mb-4"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.02,
-                shadowRadius: 6,
-                elevation: 1,
-              }}
-            >
-              <Text
-                className="text-[18px] font-bold text-[#4B5563] mb-1"
-                numberOfLines={1}
+        {assignments.length > 0 ? (
+          assignments.map((item) => {
+            const isCommittee = item.function === "ANONYMAT_COMITE";
+            
+            return (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.85}
+                onPress={() => setSelectedAssignment(item)}
+                className="bg-white rounded-[28px] p-6 mb-5 border border-gray-100 shadow-sm"
+                style={{
+                  shadowColor: "#311B92",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.03,
+                  shadowRadius: 10,
+                  elevation: 2,
+                }}
               >
-                {shift.sessionLabel}
-              </Text>
-              <Text className="text-[13px] font-medium text-[#9CA3AF] mb-4">
-                {formatDateLabel(shift.examDate)} • {formatTime(shift.examDate)}
-              </Text>
+                {/* Session Label & Details */}
+                <View className="flex-row justify-between items-start mb-4">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-[18px] font-black text-[#1F2937] tracking-tight leading-snug mb-1">
+                      {item.session?.label}
+                    </Text>
+                    <Text className="text-[13px] font-bold text-[#9CA3AF]">
+                      {i18n.t("Academic Year:")} {item.session?.academicYear}
+                    </Text>
+                  </View>
 
-              <View className="flex-row justify-between items-center">
-                <View className="flex-row items-center flex-1 pr-2">
-                  <Ionicons name="location-outline" size={16} color="#9CA3AF" />
-                  <Text
-                    className="text-[#9CA3AF] text-[13px] font-medium ml-1"
-                    numberOfLines={1}
-                  >
-                    {`${shift.room?.name}, ${shift.room?.floor}`}
-                  </Text>
+                  {/* Top-Right Mini Status Capsule */}
+                  <View className="bg-[#F3F4F6] px-2.5 py-1 rounded-md">
+                    <Text className="text-gray-500 text-[11px] font-extrabold tracking-wider uppercase">
+                      {item.session?.status}
+                    </Text>
+                  </View>
                 </View>
 
-                <View className="bg-[#FFF7ED] px-3 py-1.5 rounded-full flex-row items-center border border-[#FED7AA]">
-                  <Ionicons name="lock-closed" size={12} color="#C2410C" />
-                  <Text className="text-[#C2410C] text-[12px] font-bold ml-1">
-                    {shift.sessionStatus === "DRAFT"
-                      ? i18n.t("Waiting to start")
-                      : shift.sessionStatus}
-                  </Text>
+                {/* Separator Divider Line */}
+                <View className="h-[1px] bg-gray-100 w-full my-1 mb-4" />
+
+                {/* Bottom Row Badge Callout with directional action */}
+                <View className="flex-row justify-between items-center">
+                  <View className="flex-row items-center">
+                    <View className={`p-2.5 rounded-xl ${isCommittee ? "bg-[#EEEBFF]" : "bg-[#E0F2FE]"}`}>
+                      <MaterialCommunityIcons
+                        name={isCommittee ? "shield-account" : "clipboard-text-clock"}
+                        size={18}
+                        color={isCommittee ? "#311B92" : "#0369A1"}
+                      />
+                    </View>
+                    
+                    <View className="ml-3">
+                      <Text className="text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">
+                        {i18n.t("Assigned Function")}
+                      </Text>
+                      <Text className={`text-[14px] font-black ${isCommittee ? "text-[#311B92]" : "text-[#0369A1]"}`}>
+                        {isCommittee ? i18n.t("Anonymity Committee") : i18n.t("Surveillant")}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Small Action Pointer Arrow */}
+                  <View className="bg-gray-50 w-9 h-9 rounded-full items-center justify-center border border-gray-100">
+                    <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))
+              </TouchableOpacity>
+            );
+          })
         ) : (
-          <Text className="text-[#9CA3AF] text-[14px] font-medium italic mt-2">
-            {i18n.t("No upcoming assignments found.")}
-          </Text>
-        )}
-
-        {error && (
-          <Text className="text-center text-red-500 text-[12px] font-semibold mt-4">
-            {error}
-          </Text>
+          /* Missing Session Configuration Fallback View */
+          <View className="bg-white rounded-[24px] p-8 items-center border border-dashed border-[#E5E7EB]">
+            <MaterialCommunityIcons name="account-question" size={44} color="#9CA3AF" />
+            <Text className="text-[#6B7280] font-bold text-[16px] mt-3 text-center">
+              {i18n.t("No assignments configuration loaded.")}
+            </Text>
+            <Text className="text-gray-400 text-[13px] font-medium text-center mt-1">
+              {i18n.t("Contact administration to bind your staff profile to an exam window.")}
+            </Text>
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
