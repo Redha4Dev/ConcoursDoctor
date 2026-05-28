@@ -195,6 +195,7 @@ model SessionSpecialization {
   sessionId                 String
   formationSpecializationId String
   availableSlots            Int
+  waitingListSlots          Int
 
   session                CompetitionSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   formationSpecialization FormationSpecialization @relation(fields: [formationSpecializationId], references: [id])

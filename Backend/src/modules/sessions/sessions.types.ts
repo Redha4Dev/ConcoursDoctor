@@ -21,10 +21,12 @@ export const UpdateSessionSchema = z.object({
 export const AddSessionSpecializationSchema = z.object({
   formationSpecializationId: z.string().uuid("Invalid specialization ID"),
   availableSlots: z.number().int().positive(),
+  waitingListSlots: z.number().int().min(0),
 });
 
 export const UpdateSessionSpecializationSchema = z.object({
   availableSlots: z.number().int().positive().optional(),
+  waitingListSlots: z.number().int().min(0),
 });
 
 // Session staff

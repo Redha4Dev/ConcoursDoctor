@@ -542,6 +542,9 @@ components:
         availableSlots:
           type: integer
           example: 10
+        waitingListSlots:
+          type: integer
+          example: 5
         formationSpecialization:
           $ref: "#/components/schemas/Specialization"
         _count:
@@ -563,6 +566,10 @@ components:
           type: integer
           minimum: 1
           example: 10
+        waitingListSlots:
+          type: integer
+          minimum: 0
+          example: 5
 
     # ADDED 2026-05-01: UpdateSessionSpecializationBody
     UpdateSessionSpecializationBody:
@@ -571,6 +578,9 @@ components:
         availableSlots:
           type: integer
           minimum: 1
+        waitingListSlots: # 👈 ADD THIS
+          type: integer
+          minimum: 0
 
     # ADDED 2026-05-01: SessionStaffItem — a user assigned to a session with a function.
     # Replaces FormationStaffItem (which was formation-scoped, not session-scoped).
@@ -1552,7 +1562,16 @@ components:
     # ── Correction ────────────────────────────────────────────────────────────
     CopyStatus:
       type: string
-      enum: [PENDING, ASSIGNED, FIRST_DONE, SECOND_DONE, DISCREPANCY, THIRD_DONE, VALIDATED]
+      enum:
+        [
+          PENDING,
+          ASSIGNED,
+          FIRST_DONE,
+          SECOND_DONE,
+          DISCREPANCY,
+          THIRD_DONE,
+          VALIDATED,
+        ]
       description: Status of an anonymous exam copy during grading
 
     ResolutionRule:
@@ -2018,7 +2037,7 @@ paths:
                   # MODIFIED 2026-05-01: Added pattern constraints matching Zod ChangePasswordSchema
                   type: string
                   minLength: 8
-                  pattern: '^(?=.*[A-Z])(?=.*[0-9]).+$'
+                  pattern: "^(?=.*[A-Z])(?=.*[0-9]).+$"
                   description: Must contain at least one uppercase letter and one number
                   example: NewAdmin@2026
       responses:
@@ -2099,7 +2118,7 @@ paths:
                   # MODIFIED 2026-05-01: Added pattern constraints matching Zod ResetPasswordSchema
                   type: string
                   minLength: 8
-                  pattern: '^(?=.*[A-Z])(?=.*[0-9]).+$'
+                  pattern: "^(?=.*[A-Z])(?=.*[0-9]).+$"
                   description: Must contain at least one uppercase letter and one number
                   example: NewPass@123
       responses:
@@ -2126,7 +2145,7 @@ paths:
           in: query
           schema:
             type: string
-         # MODIFIED 2026-05-01: Search now also covers institution field
+          # MODIFIED 2026-05-01: Search now also covers institution field
           description: Search by firstName, lastName, email, or institution
           example: Ahmed
         - name: role
