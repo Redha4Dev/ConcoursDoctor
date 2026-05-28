@@ -33,7 +33,13 @@ export const UpdateSessionSpecializationSchema = z.object({
 export const AssignStaffSchema = z
   .object({
     userId: z.string().uuid("Invalid user ID"),
-    function: z.enum(["CORRECTOR", "JURY_MEMBER", "SURVEILLANT", "AUDITOR"]),
+    function: z.enum([
+      "CORRECTOR",
+      "JURY_MEMBER",
+      "SURVEILLANT",
+      "AUDITOR",
+      "ANONYMAT_COMITE",
+    ]),
     subjectId: z.string().uuid("Invalid subject ID").optional(),
   })
   .superRefine((data, ctx) => {

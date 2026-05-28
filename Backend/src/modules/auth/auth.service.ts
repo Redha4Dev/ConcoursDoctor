@@ -9,8 +9,26 @@ import { resetPasswordTemplate } from "../../utils/emailTemplates.js";
 import type { ForgotPasswordDto, ResetPasswordDto } from "./auth.types.js";
 
 export const loginUser = async (dto: LoginDto) => {
+  // 1. Fetch user and include their session assignments
   const user = await identityDb.user.findUnique({
     where: { email: dto.email },
+    include: {
+      sessionStaff: {
+        select: {
+          id: true,
+          function: true,
+          subjectId: true,
+          session: {
+            select: {
+              id: true,
+              label: true,
+              status: true,
+              academicYear: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!user || !user.isActive) {
@@ -23,11 +41,15 @@ export const loginUser = async (dto: LoginDto) => {
   }
 
   // FIX: Wrapped in a non-blocking catch to prevent login failure if DB write fails (Issue 4)
-  identityDb.user.update({
-    where: { id: user.id },
-    data: { lastLogin: new Date() },
-  }).catch(() => {});
+  identityDb.user
+    .update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
+    })
+    .catch(() => {});
 
+  // Note: We intentionally do NOT put sessionStaff in the JWT payload.
+  // It makes the token too large and session status changes frequently.
   const token = signToken({
     id: user.id,
     email: user.email,
@@ -45,6 +67,7 @@ export const loginUser = async (dto: LoginDto) => {
       email: user.email,
       role: user.role,
       mustChangePassword: user.mustChangePassword,
+      sessionStaff: user.sessionStaff, // 👈 Frontend uses this for redirect routing
     },
   };
 };
@@ -61,8 +84,25 @@ export const getMe = async (userId: string) => {
       mustChangePassword: true,
       lastLogin: true,
       createdAt: true,
+      // 👈 Ensure the /me route also returns the exact same routing data
+      sessionStaff: {
+        select: {
+          id: true,
+          function: true,
+          subjectId: true,
+          session: {
+            select: {
+              id: true,
+              label: true,
+              status: true,
+              academicYear: true,
+            },
+          },
+        },
+      },
     },
   });
+
   if (!user) throw new AppError("User not found", 404);
   return user;
 };
@@ -78,7 +118,10 @@ export const changeUserPassword = async (
 
   // FIX: Added check to ensure new password is not the same as the old one (Missing Best Practices)
   if (dto.newPassword === dto.oldPassword) {
-    throw new AppError("New password must be different from current password", 400);
+    throw new AppError(
+      "New password must be different from current password",
+      400,
+    );
   }
 
   const isValid = await bcrypt.compare(dto.oldPassword, user.passwordHash);
@@ -117,8 +160,8 @@ export const forgotPassword = async (dto: ForgotPasswordDto) => {
     },
   });
 
-const PORT_Front = process.env.PORT_Front ;
-const FRONTEND_URL = `http://localhost:${PORT_Front}`;
+  const PORT_Front = process.env.PORT_Front;
+  const FRONTEND_URL = `http://localhost:${PORT_Front}`;
   const resetUrl = `${FRONTEND_URL}/reset-password/?token=${rawToken}`;
   const { subject, html } = resetPasswordTemplate(
     user.firstName,

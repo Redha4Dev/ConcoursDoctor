@@ -253,6 +253,7 @@ export const addSessionSpecialization = async (
       sessionId,
       formationSpecializationId: dto.formationSpecializationId,
       availableSlots: dto.availableSlots,
+      waitingListSlots: dto.waitingListSlots,
     },
     include: { formationSpecialization: true },
   });
@@ -368,8 +369,7 @@ export const assignStaff = async (
     const subject = await identityDb.subject.findFirst({
       where: { id: dto.subjectId, sessionId },
     });
-    if (!subject)
-      throw new AppError("Subject not found in this session", 404);
+    if (!subject) throw new AppError("Subject not found in this session", 404);
   }
 
   // Duplicate guard — uses findFirst because the unique index is now 4 columns
