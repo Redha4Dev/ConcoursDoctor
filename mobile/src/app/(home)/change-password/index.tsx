@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 import api from "../../../../utils/axios";
 import { Link } from "expo-router";
+import { i18n } from "../../../../locales/i18n";
 
 export default function ResetPasswordMobile() {
   // --- States ---
@@ -32,10 +33,10 @@ export default function ResetPasswordMobile() {
 
   // --- Password Validation Logic ---
   const requirements = [
-    { label: "At least 8 characters", met: password.length >= 8 },
-    { label: "Contains a number", met: /\d/.test(password) },
+    { label: i18n.t("At least 8 characters"), met: password.length >= 8 },
+    { label: i18n.t("Contains a number"), met: /\d/.test(password) },
     {
-      label: "Contains a special character",
+      label: i18n.t("Contains a special character"),
       met: /[^A-Za-z0-9]/.test(password),
     },
   ];
@@ -46,15 +47,15 @@ export default function ResetPasswordMobile() {
   const handleChangePassword = async () => {
     // Basic Client-side Validation
     if (!oldPassword) {
-      Alert.alert("Error", "Please enter your current password.");
+      Alert.alert(i18n.t("Error"), i18n.t("Please enter your current password"));
       return;
     }
     if (!allRequirementsMet) {
-      Alert.alert("Error", "New password does not meet all requirements.");
+      Alert.alert(i18n.t("Error"), i18n.t("New password does not meet all requirements"));
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match.");
+      Alert.alert(i18n.t("Error"), i18n.t("Passwords do not match"));
       return;
     }
 
@@ -65,7 +66,7 @@ export default function ResetPasswordMobile() {
         newPassword: password,
       });
 
-      Alert.alert("Success", "Your password has been updated successfully.");
+      Alert.alert(i18n.t("Success"), i18n.t("Your password has been updated successfully"));
 
       // Clear form
       setOldPassword("");
@@ -74,8 +75,8 @@ export default function ResetPasswordMobile() {
     } catch (error: any) {
       const msg =
         error?.response?.data?.message ||
-        "An error occurred. Please try again.";
-      Alert.alert("Update Failed", msg);
+        i18n.t("An error occurred Please try again");
+      Alert.alert(i18n.t("Update Failed"), msg);
     } finally {
       setIsLoading(false);
     }
@@ -105,11 +106,10 @@ export default function ResetPasswordMobile() {
             </View>
 
             <Text className="text-2xl font-extrabold text-[#1E293B] text-center mb-2">
-              Set a New Password
+              {i18n.t("Set a New Password")}
             </Text>
             <Text className="text-sm text-slate-500 text-center px-5 leading-5">
-              Please choose a password you haven't used before to secure your
-              account.
+              {i18n.t("Please choose a password you haven't used before to secure your account")}
             </Text>
           </View>
 
@@ -117,13 +117,13 @@ export default function ResetPasswordMobile() {
           <View className="mb-6">
             {/* Old Password */}
             <Text className="text-sm font-semibold text-slate-600 mb-2 uppercase tracking-wider">
-              Old Password
+              {i18n.t("Old Password")}
             </Text>
             <View className="flex-row items-center bg-slate-100 rounded-xl px-4 h-14 mb-4">
               <Lock size={20} color="#94A3B8" className="mr-3" />
               <TextInput
                 className="flex-1 text-base text-[#1E293B]"
-                placeholder="Current password"
+                placeholder={i18n.t("Current password")}
                 placeholderTextColor="#94A3B8"
                 secureTextEntry={!showPass}
                 value={oldPassword}
@@ -141,13 +141,13 @@ export default function ResetPasswordMobile() {
 
             {/* New Password */}
             <Text className="text-sm font-semibold text-slate-600 mb-2 mt-2 uppercase tracking-wider">
-              New Password
+              {i18n.t("New Password")}
             </Text>
             <View className="flex-row items-center bg-slate-100 rounded-xl px-4 h-14 mb-4">
               <Lock size={20} color="#94A3B8" className="mr-3" />
               <TextInput
                 className="flex-1 text-base text-[#1E293B]"
-                placeholder="New password"
+                placeholder={i18n.t("New password")}
                 placeholderTextColor="#94A3B8"
                 secureTextEntry={!showPass}
                 value={password}
@@ -158,13 +158,13 @@ export default function ResetPasswordMobile() {
 
             {/* Confirm Password */}
             <Text className="text-sm font-semibold text-slate-600 mb-2 mt-2 uppercase tracking-wider">
-              Confirm Password
+              {i18n.t("Confirm Password")}
             </Text>
             <View className="flex-row items-center bg-slate-100 rounded-xl px-4 h-14">
               <Lock size={20} color="#94A3B8" className="mr-3" />
               <TextInput
                 className="flex-1 text-base text-[#1E293B]"
-                placeholder="Confirm new password"
+                placeholder={i18n.t("Confirm new password")}
                 placeholderTextColor="#94A3B8"
                 secureTextEntry={!showPass}
                 value={confirmPassword}
@@ -211,7 +211,7 @@ export default function ResetPasswordMobile() {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <Text className="text-white text-base font-bold">
-                  Update Password
+                  {i18n.t("Update Password")}
                 </Text>
               )}
             </TouchableOpacity>
@@ -222,7 +222,7 @@ export default function ResetPasswordMobile() {
             >
               <ChevronLeft size={18} color="#3014B8" />
               <Text className="text-[#3014B8] text-base font-bold ml-1">
-                Back to home
+                {i18n.t("Back to home")}
               </Text>
             </Link>
           </View>

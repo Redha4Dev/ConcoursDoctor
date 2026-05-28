@@ -274,7 +274,7 @@ export default function CandidateListScreen() {
         <View className="absolute inset-0 bg-white/70 z-50 justify-center items-center">
           <ActivityIndicator size="large" color="#311B92" />
           <Text className="text-[#311B92] font-bold mt-3">
-            {i18n.t("Submitting Attendance...")}
+            {i18n.t("Submitting Attendance")}
           </Text>
         </View>
       )}
