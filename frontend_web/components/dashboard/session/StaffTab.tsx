@@ -6,16 +6,12 @@ import { api } from "@/lib/api";
 import { Plus, Trash2, Loader2, X } from "lucide-react";
 
 interface StaffCard {
-  id: string;          // This will now strictly represent the true global userId
-  assignmentId: string; // The specific primary key of this session staff registration entry
+  id: string;          // Global core user ID used for request payloads
+  assignmentId?: string; // Unique primary key of a session staff entry row (if assigned)
   initials: string;
   name: string;
   role: string;
-  availability?: string;
-  specialty?: string;
   institution?: string;
-  online?: boolean;
-  sessionRoomId?: string;
 }
 
 interface Subject {
@@ -137,10 +133,10 @@ const SectionCard = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {members.map((m) => (
           <StaffMemberCard
-            key={m.assignmentId}
+            key={m.assignmentId || m.id}
             member={m}
             onRemove={onRemove ? () => onRemove(m) : undefined}
-            isRemoving={removingId === m.assignmentId}
+            isRemoving={removingId === m.assignmentId || removingId === m.id}
           />
         ))}
       </div>
@@ -152,25 +148,25 @@ export default function StaffTab() {
   const params = useParams();
   const sessionId = params?.sessionId as string;
 
-  // Data State
-  const [allStaff, setAllStaff] = useState<StaffCard[]>([]);
+  // Data States
+  const [assignedStaff, setAssignedStaff] = useState<StaffCard[]>([]);
+  const [globalStaff, setGlobalStaff] = useState<StaffCard[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Modal State
+  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assignRole, setAssignRole] = useState<
     "surveillant" | "corrector" | "jury" | null
   >(null);
 
-  // Form State
+  // Form States
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
 
   const coordinator: StaffCard = {
     id: "coord-1",
-    assignmentId: "coord-assign-1",
     initials: "MM",
     name: "Malki Mimoun",
     role: "ESI-SBA COORDINATOR",
@@ -181,40 +177,35 @@ export default function StaffTab() {
   const fetchStaffData = async () => {
     if (!sessionId) return;
     try {
-      const { data } = await api.get(`/api/v1/sessions/${sessionId}/staff`);
-      const staffList = data?.data || data || [];
-
-      const mappedStaff = staffList.map((entry: any) => ({
-        id: entry.userId || entry.user?.id, // Global core identifier used for payloads
-        assignmentId: entry.id,             // Local relational key unique to this table placement
-        initials:
-          entry.user.firstName[0].toUpperCase() +
-          entry.user.lastName[0].toUpperCase(),
-        name:
-          entry.user.firstName + " " + entry.user.lastName ||
-          entry.user.name ||
-          "Unknown User",
-        role: entry.function || entry.role || "staff",
-        availability: entry.availability,
-        specialty: entry.specialty,
-        institution: entry.institution || entry.user?.institution,
-        sessionRoomId: entry.sessionRoomId,
-      }));
-
-      // Unique layout configuration filter to drop multiple duplicates from selection maps
-      const uniqueUsers: StaffCard[] = [];
-      const seenIds = new Set<string>();
+      // 1. Fetch unassigned users filtering by role=STAFF from the global route to populate modal dropdown
+      const usersRes = await api.get(`/api/v1/users?role=STAFF`);
+      const usersList = usersRes.data?.data?.users || usersRes.data?.users || usersRes.data?.data || [];
       
-      mappedStaff.forEach((staff: StaffCard) => {
-        if (staff.id && !seenIds.has(staff.id)) {
-          seenIds.add(staff.id);
-          uniqueUsers.push(staff);
-        }
-      });
+      const mappedGlobalStaff = usersList.map((user: any) => ({
+        id: user.id,
+        initials: (user.firstName?.[0] || "U") + (user.lastName?.[0] || "S"),
+        name: `${user.firstName} ${user.lastName}`,
+        role: user.role || "STAFF",
+        institution: user.institution,
+      }));
+      setGlobalStaff(mappedGlobalStaff);
 
-      setAllStaff(mappedStaff);
+      // 2. Fetch staff members already assigned to this session to update dashboard table lists
+      const assignedRes = await api.get(`/api/v1/sessions/${sessionId}/staff`);
+      const assignedList = assignedRes.data?.data || assignedRes.data || [];
+
+      const mappedAssignedStaff = assignedList.map((entry: any) => ({
+        id: entry.userId || entry.user?.id,
+        assignmentId: entry.id,
+        initials: (entry.user?.firstName?.[0] || "U") + (entry.user?.lastName?.[0] || "S"),
+        name: entry.user ? `${entry.user.firstName} ${entry.user.lastName}` : "Unknown User",
+        role: entry.function || "STAFF",
+        institution: entry.user?.institution,
+      }));
+      setAssignedStaff(mappedAssignedStaff);
+
     } catch (error) {
-      console.error("Error fetching staff:", error);
+      console.error("Error fetching staff data configuration:", error);
     }
   };
 
@@ -238,17 +229,15 @@ export default function StaffTab() {
     loadData();
   }, [sessionId]);
 
-  console.log("All Staff Data:", allStaff);
-
-  // Local Filtering for displaying sections
-  const correctors = allStaff.filter(
-    (s) => s.role.toLowerCase() === "corrector",
+  // Filtering local dashboard displays matching exact backend enums
+  const correctors = assignedStaff.filter(
+    (s) => s.role === "CORRECTOR",
   );
-  const juryMembers = allStaff.filter(
-    (s) => s.role.toLowerCase() === "jury_member" || s.role.toLowerCase() === "jury"
+  const juryMembers = assignedStaff.filter(
+    (s) => s.role === "JURY_MEMBER",
   );
-  const proctors = allStaff.filter(
-    (s) => s.role.toLowerCase() === "surveillant",
+  const proctors = assignedStaff.filter(
+    (s) => s.role === "SURVEILLANT",
   );
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
@@ -259,7 +248,6 @@ export default function StaffTab() {
       setActionLoading("assigning");
 
       if (assignRole === "surveillant") {
-        // Enforces your backend payload configuration validation: subjectId must be null or completely omitted
         await api.post(`/api/v1/sessions/${sessionId}/staff`, {
           userId: selectedUserId,
           function: "SURVEILLANT",
@@ -295,14 +283,12 @@ export default function StaffTab() {
       return;
 
     try {
-      setActionLoading(member.assignmentId);
+      setActionLoading(member.assignmentId || member.id);
       
-      // Determine the structural functional parameter configuration needed for the backend query lookup
       let backendFuncStr = "SURVEILLANT";
       if (role === "corrector") backendFuncStr = "CORRECTOR";
       if (role === "jury") backendFuncStr = "JURY_MEMBER";
 
-      // Dynamically triggers verification against the signature profile layout setup
       await api.delete(
         `/api/v1/sessions/${sessionId}/staff/${member.id}/${backendFuncStr}`
       );
@@ -334,11 +320,6 @@ export default function StaffTab() {
       </div>
     );
   }
-
-  // Get a unique selection array for the choice dropdown map array to avoid duplication visuals
-  const uniqueDropdownOptions = Array.from(
-    new Map(allStaff.map((item) => [item.id, item])).values()
-  );
 
   return (
     <div className="flex flex-col gap-8 w-full relative">
@@ -429,7 +410,7 @@ export default function StaffTab() {
                   className="w-full bg-[#F6F6F8] border-none rounded-xl py-3 px-4 text-[14px] text-slate-800 outline-none focus:ring-2 focus:ring-[#3014B8]/30 transition-all cursor-pointer appearance-none"
                 >
                   <option value="">-- Choisir dans la liste --</option>
-                  {uniqueDropdownOptions.map((staff) => (
+                  {globalStaff.map((staff) => (
                     <option key={staff.id} value={staff.id}>
                       {staff.name}
                     </option>
