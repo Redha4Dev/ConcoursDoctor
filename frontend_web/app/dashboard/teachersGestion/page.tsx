@@ -24,7 +24,7 @@ interface User {
   firstName: string;
   lastName: string;
   email: string;
-  role: "CORRECTOR" | "SURVEILLANT" | "JURY" | "AUDITOR" | "COORDINATOR";
+  role:  "STAFF" | "COORDINATOR"; //"CORRECTOR" | "SURVEILLANT" | "JURY" | "AUDITOR"
   specialization: string;
   academicGrade: string;
   institution: string;
@@ -47,7 +47,7 @@ const TeachersDashboard = () => {
     firstName: "",
     lastName: "",
     email: "",
-    role: "CORRECTOR",
+    role: "STAFF",
     specialization: "",
     academicGrade: "",
     institution: "",
@@ -98,26 +98,26 @@ const TeachersDashboard = () => {
       text: "text-indigo-600",
     },
     {
-      label: "Correctors",
-      val: safeUsers.filter((u) => u.role === "CORRECTOR").length,
+      label: "Coordinators",
+      val: safeUsers.filter((u) => u.role === "COORDINATOR").length,
       icon: <ShieldCheck size={16} />,
       color: "bg-blue-50",
       text: "text-blue-600",
     },
     {
-      label: "Surveillants",
-      val: safeUsers.filter((u) => u.role === "SURVEILLANT").length,
+      label: "Staffs",
+      val: safeUsers.filter((u) => u.role === "STAFF").length,
       icon: <CircleEllipsis size={16} />,
       color: "bg-amber-50",
       text: "text-amber-600",
     },
-    {
-      label: "Juries",
-      val: safeUsers.filter((u) => u.role === "JURY").length,
-      icon: <Ban size={16} />,
-      color: "bg-rose-50",
-      text: "text-rose-600",
-    },
+    // {
+    //   label: "Juries",
+    //   val: safeUsers.filter((u) => u.role === "JURY").length,
+    //   icon: <Ban size={16} />,
+    //   color: "bg-rose-50",
+    //   text: "text-rose-600",
+    // },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,7 +156,7 @@ const TeachersDashboard = () => {
       firstName: "",
       lastName: "",
       email: "",
-      role: "CORRECTOR",
+      role: "STAFF",
       specialization: "",
       academicGrade: "",
       institution: "",
@@ -400,10 +400,12 @@ const TeachersDashboard = () => {
                     setFormData({ ...formData, role: e.target.value as any })
                   }
                 >
-                  <option value="CORRECTOR">CORRECTOR</option>
+                  <option value="STAFF">STAFF</option>
+                  <option value="COORDINATOR">COORDINATOR</option>
+                  {/* <option value="CORRECTOR">CORRECTOR</option>
                   <option value="SURVEILLANT">SURVEILLANT</option>
                   <option value="COORDINATOR">COORDINATOR</option>
-                  <option value="AUDITOR">AUDITOR</option>
+                  <option value="AUDITOR">AUDITOR</option> */}
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
