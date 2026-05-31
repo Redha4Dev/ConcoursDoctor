@@ -312,7 +312,6 @@ export const updateSessionSpecialization = asyncHandler(
   async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const specId = req.params.specId as string;
-
     if (!id || !specId) {
       res.status(400);
       throw new Error("Session ID and Specialization ID are required");
@@ -366,7 +365,7 @@ export const removeSessionSpecialization = asyncHandler(
       entityId: specId,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] as string,
-      payload: { specId },
+      payload: { specializationId: specId },
     }).catch(() => {});
 
     res.status(200).json({

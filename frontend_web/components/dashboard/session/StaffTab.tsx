@@ -6,15 +6,22 @@ import { api } from "@/lib/api";
 import { Plus, Trash2, Loader2, X } from "lucide-react";
 
 interface StaffCard {
-  id: string;
+  id: string;          // Global core user ID used for request payloads
+  assignmentId?: string; // Unique primary key of a session staff entry row (if assigned)
   initials: string;
   name: string;
   role: string;
-  availability?: string;
-  specialty?: string;
   institution?: string;
-  online?: boolean;
-  sessionRoomId?: string;
+}
+
+interface Subject {
+  id: string;
+  sessionId: string;
+  name: string;
+  coefficient: number;
+  maxGrade: number;
+  minimumGrade: number;
+  description?: string;
 }
 
 const StaffMemberCard = ({
@@ -126,10 +133,10 @@ const SectionCard = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {members.map((m) => (
           <StaffMemberCard
-            key={m.id}
+            key={m.assignmentId || m.id}
             member={m}
             onRemove={onRemove ? () => onRemove(m) : undefined}
-            isRemoving={removingId === m.id}
+            isRemoving={removingId === m.assignmentId || removingId === m.id}
           />
         ))}
       </div>
@@ -141,20 +148,22 @@ export default function StaffTab() {
   const params = useParams();
   const sessionId = params?.sessionId as string;
 
-  // State
-  const [allStaff, setAllStaff] = useState<StaffCard[]>([]);
+  // Data States
+  const [assignedStaff, setAssignedStaff] = useState<StaffCard[]>([]);
+  const [globalStaff, setGlobalStaff] = useState<StaffCard[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Modal State
+  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assignRole, setAssignRole] = useState<
     "surveillant" | "corrector" | "jury" | null
   >(null);
 
-  // Form State
+  // Form States
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [sessionRoomIdInput, setSessionRoomIdInput] = useState("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
 
   const coordinator: StaffCard = {
     id: "coord-1",
@@ -167,47 +176,68 @@ export default function StaffTab() {
 
   const fetchStaffData = async () => {
     if (!sessionId) return;
-    setIsLoading(true);
     try {
-      // Single GET request for all staff as requested
-      const { data } = await api.get(`/api/v1/sessions/${sessionId}/staff`);
-      console.log(data);
-      const staffList = data?.data || data || [];
-
-      const mappedStaff = staffList.map((user: any) => ({
-        id: user.id || user.userId,
-        initials: user.user.firstName[0].toUpperCase() + user.user.lastName[0].toUpperCase()
-              ,
-        name:
-          user.user.firstName + " " + user.user.lastName ||
-          user.user.name ||
-          "Unknown User",
-        role: user.role || "staff",
-        availability: user.availability,
-        specialty: user.specialty,
+      // 1. Fetch unassigned users filtering by role=STAFF from the global route to populate modal dropdown
+      const usersRes = await api.get(`/api/v1/users?role=STAFF`);
+      const usersList = usersRes.data?.data?.users || usersRes.data?.users || usersRes.data?.data || [];
+      
+      const mappedGlobalStaff = usersList.map((user: any) => ({
+        id: user.id,
+        initials: (user.firstName?.[0] || "U") + (user.lastName?.[0] || "S"),
+        name: `${user.firstName} ${user.lastName}`,
+        role: user.role || "STAFF",
         institution: user.institution,
-        sessionRoomId: user.sessionRoomId,
       }));
+      setGlobalStaff(mappedGlobalStaff);
 
-      setAllStaff(mappedStaff);
+      // 2. Fetch staff members already assigned to this session to update dashboard table lists
+      const assignedRes = await api.get(`/api/v1/sessions/${sessionId}/staff`);
+      const assignedList = assignedRes.data?.data || assignedRes.data || [];
+
+      const mappedAssignedStaff = assignedList.map((entry: any) => ({
+        id: entry.userId || entry.user?.id,
+        assignmentId: entry.id,
+        initials: (entry.user?.firstName?.[0] || "U") + (entry.user?.lastName?.[0] || "S"),
+        name: entry.user ? `${entry.user.firstName} ${entry.user.lastName}` : "Unknown User",
+        role: entry.function || "STAFF",
+        institution: entry.user?.institution,
+      }));
+      setAssignedStaff(mappedAssignedStaff);
+
     } catch (error) {
-      console.error("Error fetching staff:", error);
-    } finally {
-      setIsLoading(false);
+      console.error("Error fetching staff data configuration:", error);
+    }
+  };
+
+  const fetchSubjects = async () => {
+    if (!sessionId) return;
+    try {
+      const { data } = await api.get(`/api/v1/sessions/${sessionId}/subjects`);
+      const subjectList = data?.data || data || [];
+      setSubjects(subjectList);
+    } catch (error) {
+      console.error("Error fetching subjects:", error);
     }
   };
 
   useEffect(() => {
-    fetchStaffData();
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([fetchStaffData(), fetchSubjects()]);
+      setIsLoading(false);
+    };
+    loadData();
   }, [sessionId]);
 
-  // Local Filtering for sections
-  const correctors = allStaff.filter(
-    (s) => s.role.toLowerCase() === "corrector",
+  // Filtering local dashboard displays matching exact backend enums
+  const correctors = assignedStaff.filter(
+    (s) => s.role === "CORRECTOR",
   );
-  const juryMembers = allStaff.filter((s) => s.role.toLowerCase() === "jury");
-  const proctors = allStaff.filter(
-    (s) => s.role.toLowerCase() === "surveillant",
+  const juryMembers = assignedStaff.filter(
+    (s) => s.role === "JURY_MEMBER",
+  );
+  const proctors = assignedStaff.filter(
+    (s) => s.role === "SURVEILLANT",
   );
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
@@ -218,19 +248,25 @@ export default function StaffTab() {
       setActionLoading("assigning");
 
       if (assignRole === "surveillant") {
-        if (!sessionRoomIdInput) {
-          alert("L'ID de la salle est requis.");
+        await api.post(`/api/v1/sessions/${sessionId}/staff`, {
+          userId: selectedUserId,
+          function: "SURVEILLANT",
+        });
+      } else if (assignRole === "corrector") {
+        if (!selectedSubjectId) {
+          alert("Le sujet (matière) est requis pour un correcteur.");
           return;
         }
-        await api.post(
-          `/api/v1/sessions/${sessionId}/rooms/${sessionRoomIdInput}/surveillants`,
-          {
-            userId: selectedUserId,
-          },
-        );
-      } else {
-        // Placeholders for other roles
-        console.log(`Assigning ${assignRole} (User: ${selectedUserId})`);
+        await api.post(`/api/v1/sessions/${sessionId}/staff`, {
+          userId: selectedUserId,
+          function: "CORRECTOR",
+          subjectId: selectedSubjectId,
+        });
+      } else if (assignRole === "jury") {
+        await api.post(`/api/v1/sessions/${sessionId}/staff`, {
+          userId: selectedUserId,
+          function: "JURY_MEMBER",
+        });
       }
 
       await fetchStaffData();
@@ -247,12 +283,16 @@ export default function StaffTab() {
       return;
 
     try {
-      setActionLoading(member.id);
-      if (role === "surveillant" && member.sessionRoomId) {
-        await api.delete(
-          `/api/v1/sessions/${sessionId}/rooms/${member.sessionRoomId}/surveillants/${member.id}`,
-        );
-      }
+      setActionLoading(member.assignmentId || member.id);
+      
+      let backendFuncStr = "SURVEILLANT";
+      if (role === "corrector") backendFuncStr = "CORRECTOR";
+      if (role === "jury") backendFuncStr = "JURY_MEMBER";
+
+      await api.delete(
+        `/api/v1/sessions/${sessionId}/staff/${member.id}/${backendFuncStr}`
+      );
+      
       await fetchStaffData();
     } catch (error) {
       console.error(`Error removing:`, error);
@@ -270,7 +310,7 @@ export default function StaffTab() {
     setIsModalOpen(false);
     setAssignRole(null);
     setSelectedUserId("");
-    setSessionRoomIdInput("");
+    setSelectedSubjectId("");
   };
 
   if (isLoading) {
@@ -345,7 +385,7 @@ export default function StaffTab() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
               <h3 className="text-[18px] font-bold text-[#0F172A] capitalize">
-                Assigner un {assignRole}
+                Assigner un {assignRole === "surveillant" ? "Surveillant" : assignRole}
               </h3>
               <button
                 onClick={closeModal}
@@ -370,27 +410,32 @@ export default function StaffTab() {
                   className="w-full bg-[#F6F6F8] border-none rounded-xl py-3 px-4 text-[14px] text-slate-800 outline-none focus:ring-2 focus:ring-[#3014B8]/30 transition-all cursor-pointer appearance-none"
                 >
                   <option value="">-- Choisir dans la liste --</option>
-                  {allStaff.map((staff) => (
+                  {globalStaff.map((staff) => (
                     <option key={staff.id} value={staff.id}>
-                      {staff.name} ({staff.role})
+                      {staff.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {assignRole === "surveillant" && (
+              {assignRole === "corrector" && (
                 <div>
                   <label className="block text-[12px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
-                    ID de la salle
+                    Sujet / Matière d'examen
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    value={sessionRoomIdInput}
-                    onChange={(e) => setSessionRoomIdInput(e.target.value)}
-                    className="w-full bg-[#F6F6F8] border-none rounded-xl py-3 px-4 text-[14px] text-slate-800 outline-none focus:ring-2 focus:ring-[#3014B8]/30 transition-all"
-                    placeholder="Ex: room_101"
-                  />
+                    value={selectedSubjectId}
+                    onChange={(e) => setSelectedSubjectId(e.target.value)}
+                    className="w-full bg-[#F6F6F8] border-none rounded-xl py-3 px-4 text-[14px] text-slate-800 outline-none focus:ring-2 focus:ring-[#3014B8]/30 transition-all cursor-pointer appearance-none"
+                  >
+                    <option value="">-- Choisir un sujet --</option>
+                    {subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 

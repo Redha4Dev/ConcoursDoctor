@@ -8,9 +8,10 @@ import StaffTab from "@/components/dashboard/session/StaffTab";
 import SubjectsPage from "@/components/dashboard/session/SubjectTab";
 import RoomDirectory from "@/components/dashboard/session/RoomsTab";
 import ExamSettings from "@/components/dashboard/session/SettingsTab";
+import SpecializationTab from "@/components/dashboard/session/SpecializationTab";
 
 // Tab type translations
-type TabType = "Candidates" | "Subjects" | "Staff" | "Rooms" | "Settings";
+type TabType = "Candidates" | "Subjects" | "Staff" | "Rooms" | "Settings" | "Specialization";
 
 export default function SessionPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function SessionPage() {
     "Staff",
     "Rooms",
     "Settings",
+    "Specialization"
   ];
 
   return (
@@ -84,6 +86,7 @@ export default function SessionPage() {
         {activeTab === "Subjects" && <SubjectsPage />} 
           {activeTab === "Rooms" && <RoomDirectory />} 
           {activeTab === "Settings" && <ExamSettings />}
+          {activeTab === "Specialization" && <SpecializationTab />}
           {/* {(activeTab === "Settings") && (
           <div className="flex items-center justify-center h-64 bg-white rounded-[20px] border border-[rgba(48,20,184,0.1)]">
             <p className="text-[#64748B]" style={{ fontFamily: "'Google Sans', sans-serif" }}>

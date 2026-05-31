@@ -86,8 +86,7 @@ export default function ProgramsPage() {
   const fetchPrograms = async () => {
     try {
       setIsLoading(true);
-      // Adjust this path based on your actual API base URL
-      const response = await api.get("/api/v1/formations"); 
+     const response = await api.get("/api/v1/formations"); 
       if(response.data && response.data.success) {
         setPrograms(response.data.data); 
       }
