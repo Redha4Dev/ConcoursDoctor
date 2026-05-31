@@ -69,12 +69,16 @@ export const anonymizeSessionController = asyncHandler(
 export const getAnonymizationCodesController = asyncHandler(
   async (req: Request, res: Response) => {
     const sessionId = getRouteParam(req, "sessionId");
-    const data = await getAnonymizationCodes(sessionId);
+    const result = await getAnonymizationCodes(sessionId, {
+      search: req.query.search as string | undefined,
+      page: req.query.page ? Number(req.query.page) : 1,
+      limit: req.query.limit ? Number(req.query.limit) : 50,
+    });
 
     return res.status(200).json({
       success: true,
-      message: `Retrieved ${data.length} anonymization codes`,
-      data,
+      message: `Retrieved ${result.pagination.total} anonymization codes`,
+      data: result,
     });
   },
 );
@@ -117,4 +121,3 @@ export const getAnonymizationStatsController = asyncHandler(
     });
   },
 );
-

@@ -151,22 +151,66 @@ export const anonymizeSession = async (sessionId: string) => {
  * Returns all AnonymatMapping rows for a session, joined with the subject name.
  * Ordered strictly by anonymousCode ASC for deterministic label printing.
  */
-export const getAnonymizationCodes = async (sessionId: string) => {
-  const rows = await identityDb.anonymatMapping.findMany({
-    where: { sessionId },
-    select: {
-      qrCode: true,
-      anonymousCode: true,
-      subject: { select: { name: true } },
-    },
-    orderBy: { anonymousCode: "asc" },
-  });
+export const getAnonymizationCodes = async (
+  sessionId: string,
+  filters: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+) => {
+  const { search, page = 1, limit = 50 } = filters;
+  const skip = (page - 1) * limit;
 
-  return rows.map((r) => ({
-    qrCode: r.qrCode,
-    anonymousCode: r.anonymousCode,
-    subjectName: r.subject.name,
-  }));
+  const where = {
+    sessionId,
+    ...(search
+      ? {
+          OR: [
+            { qrCode: { contains: search, mode: "insensitive" as const } },
+            {
+              anonymousCode: { contains: search, mode: "insensitive" as const },
+            },
+            {
+              subject: {
+                name: { contains: search, mode: "insensitive" as const },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [rows, total] = await Promise.all([
+    identityDb.anonymatMapping.findMany({
+      where,
+      select: {
+        qrCode: true,
+        anonymousCode: true,
+        subject: { select: { name: true } },
+      },
+      orderBy: { anonymousCode: "asc" },
+      skip,
+      take: limit,
+    }),
+    identityDb.anonymatMapping.count({ where }),
+  ]);
+
+  return {
+    data: rows.map((r) => ({
+      qrCode: r.qrCode,
+      anonymousCode: r.anonymousCode,
+      subjectName: r.subject.name,
+    })),
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasNext: page * limit < total,
+      hasPrev: page > 1,
+    },
+  };
 };
 
 /**
@@ -228,4 +272,3 @@ export const getAnonymizationStats = async (sessionId: string) => {
 
   return { total, bySubject };
 };
-
