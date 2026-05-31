@@ -525,6 +525,23 @@ components:
         isActive:
           type: boolean
 
+    # ADDED 2026-05-31: UpdateSubjectBody — all fields optional (from Zod UpdateSubjectSchema)
+    UpdateSubjectBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        coefficient:
+          type: number
+          minimum: 0.1
+        maxGrade:
+          type: number
+        minimumGrade:
+          type: number
+        description:
+          type: string
+
     # ADDED 2026-05-01: SessionSpecialization — links a formation specialization to
     # a session with available slots and candidate count.
     SessionSpecialization:
@@ -1857,26 +1874,28 @@ security:
 # ─── PATHS ────────────────────────────────────────────────────────────────────
 paths:
   # ══ SYSTEM ══════════════════════════════════════════════════════════════════
-  /api/health:
-    get:
-      summary: Health check
-      description: Verify the API and database connections are healthy.
-      tags: [System]
-      security: []
-      responses:
-        "200":
-          description: API is running
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  timestamp:
-                    type: string
-                    format: date-time
+  # [OUTDATED 2026-05-31] GET /api/health — route is NOT registered in app.ts.
+  # Commented out to avoid misleading consumers.
+  # /api/health:
+  #   get:
+  #     summary: Health check
+  #     description: Verify the API and database connections are healthy.
+  #     tags: [System]
+  #     security: []
+  #     responses:
+  #       "200":
+  #         description: API is running
+  #         content:
+  #           application/json:
+  #             schema:
+  #               type: object
+  #               properties:
+  #                 status:
+  #                   type: string
+  #                   example: ok
+  #                 timestamp:
+  #                   type: string
+  #                   format: date-time
 
   # ══ AUTH ════════════════════════════════════════════════════════════════════
   /api/v1/auth/login:
@@ -3001,12 +3020,14 @@ paths:
   # MODIFIED 2026-05-01: /sessions/{id}/staff — updated to use SessionStaffItem
   # (not FormationStaffItem). Staff now has `function` field (not `role`).
   # Added POST (assign staff) and DELETE (remove staff) routes.
+  # DRIFT FIXED 2026-05-31: Added `func` query param (optional filter by SessionFunction).
   /api/v1/sessions/{id}/staff:
     get:
       summary: Get session staff
       description: |
         Returns all users assigned to this specific session with their function.
         Includes user info (institution, academicGrade, specialization).
+        Pass optional `func` query param to filter to a specific function (e.g. CORRECTOR).
         Any authenticated user.
       tags: [Sessions]
       parameters:
@@ -3016,6 +3037,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: func
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/SessionFunction"
+          description: Filter staff by their session function (e.g. CORRECTOR, SURVEILLANT)
       responses:
         "200":
           description: Session staff list
@@ -3407,10 +3434,12 @@ paths:
 
   /api/v1/sessions/{id}/subjects/{subjectId}:
     # UPDATED — was a stub, now fully documented
+    # DRIFT FIXED 2026-05-31: requestBody now refs UpdateSubjectBody (all fields optional).
     patch:
       summary: Update subject
       description: |
         Update a subject's name, coefficient, grades, or description.
+        All fields are optional — only provided fields are updated.
         Session must be in DRAFT status.
         Admin or Coordinator only.
       tags: [Sessions]
@@ -3432,7 +3461,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateSubjectBody"
+              $ref: "#/components/schemas/UpdateSubjectBody"
             example:
               coefficient: 2
       responses:
@@ -3928,12 +3957,14 @@ paths:
         "409":
           description: Surveillant already assigned to this room
 
-  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}/{subjectId}:
+  # DRIFT FIXED 2026-05-31: Router path is /:id/rooms/:sessionRoomId/surveillants/:userId
+  # (no /:subjectId segment). Removed phantom /{subjectId} path param from path key and params.
+  /api/v1/sessions/{id}/rooms/{sessionRoomId}/surveillants/{userId}:
     # UPDATED — was a stub, now fully documented
     delete:
       summary: Remove surveillant from room
       description: |
-        Remove a surveillant assignment from a session room for a specific subject.
+        Remove a surveillant assignment from a session room.
         Cannot remove from a locked room.
         Session must be DRAFT or OPEN.
         Admin or Coordinator only.
@@ -3957,13 +3988,6 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: subjectId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Subject ID of the exam subject the surveillant is being removed from
       responses:
         "200":
           description: Surveillant removed
@@ -5063,15 +5087,18 @@ paths:
 
   # ══ ANONYMIZATION ════════════════════════════════════════════════════════════
 
-  /api/v1/anonymization/{sessionId}/codes:
-    get:
-      summary: List all anonymization codes for a session
+  # MISSING ADDED 2026-05-31: POST /api/v1/anonymization/{sessionId}
+  # This endpoint is registered in anonymization.router.ts (line 22) and wires
+  # anonymizeSessionController. The same handler is also reachable at
+  # POST /api/v1/sessions/{sessionId}/anonymize (already documented under Sessions).
+  /api/v1/anonymization/{sessionId}:
+    post:
+      summary: Trigger session anonymization (anonymization prefix)
       description: |
-        Returns every `AnonymatMapping` row for the given session, joined with
-        the subject name. Results are ordered strictly by `anonymousCode` ASC
-        to support deterministic physical label printing.
-
-        **Access:** `ANONYMAT_COMITE` session function, or global `ADMIN` / `COORDINATOR`.
+        Triggers anonymization of all attendance-valid candidates in the session.
+        This is an alternate entry point for the same operation as
+        `POST /api/v1/sessions/{sessionId}/anonymize`.
+        Any authenticated user (no extra role restriction on this prefix).
       tags: [Anonymization]
       security:
         - cookieAuth: []
@@ -5085,7 +5112,7 @@ paths:
           description: The competition session ID
       responses:
         "200":
-          description: Array of anonymization code mappings
+          description: Session anonymized successfully
           content:
             application/json:
               schema:
@@ -5094,25 +5121,94 @@ paths:
                   - type: object
                     properties:
                       data:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            qrCode:
-                              type: string
-                              example: copy-042
-                            anonymousCode:
-                              type: string
-                              example: DOCT-2025/2026-A3F9
-                            subjectName:
-                              type: string
-                              example: Génie Logiciel
+                        type: object
+                        properties:
+                          anonymizedCount:
+                            type: integer
+                            example: 120
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
+
+  # DRIFT FIXED 2026-05-31: Added search, page, limit query params (controller reads them)
+  # and corrected response shape to paginated { codes[], pagination }.
+  # Access is ADMIN/COORDINATOR only (restrictTo in router), not ANONYMAT_COMITE.
+  /api/v1/anonymization/{sessionId}/codes:
+    get:
+      summary: List all anonymization codes for a session
+      description: |
+        Returns every `AnonymatMapping` row for the given session, joined with
+        the subject name. Results are ordered strictly by `anonymousCode` ASC
+        to support deterministic physical label printing.
+        Supports optional search filtering and pagination.
+
+        **Access:** global `ADMIN` / `COORDINATOR` role.
+      tags: [Anonymization]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by anonymousCode, qrCode, or subjectName
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: Page number (1-based)
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+          description: Number of records per page
+      responses:
+        "200":
+          description: Paginated anonymization code mappings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          codes:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                qrCode:
+                                  type: string
+                                  example: copy-042
+                                anonymousCode:
+                                  type: string
+                                  example: DOCT-2025/2026-A3F9
+                                subjectName:
+                                  type: string
+                                  example: Génie Logiciel
+                          pagination:
+                            $ref: "#/components/schemas/Pagination"
         "401":
           description: Not authenticated
         "403":
           description: |
-            Forbidden — requires `ANONYMAT_COMITE` session function,
-            or global `ADMIN` / `COORDINATOR` role
+            Forbidden — requires global `ADMIN` / `COORDINATOR` role
         "404":
           description: Session not found
 
