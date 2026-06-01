@@ -869,12 +869,10 @@ export const submitGrades = async (
         const g2 = draft.grade;
         const gap = Math.abs(g1 - g2);
 
+        // ✅ AFTER
         if (gap <= threshold) {
-          // No discrepancy — compute final grade immediately
-          await correctionDb.examCopy.update({
-            where: { id: copy.id },
-            data: { status: "SECOND_DONE" },
-          });
+          // No discrepancy — compute final grade immediately.
+          // (computeAndPersistFinalGrade will handle marking it as VALIDATED)
           await computeAndPersistFinalGrade(
             copy.id,
             sessionId,
