@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { Plus, Trash2, Loader2, X } from "lucide-react";
 
 interface StaffCard {
-  id: string;          // Global core user ID used for request payloads
+  id: string; // Global core user ID used for request payloads
   assignmentId?: string; // Unique primary key of a session staff entry row (if assigned)
   initials: string;
   name: string;
@@ -158,7 +158,7 @@ export default function StaffTab() {
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assignRole, setAssignRole] = useState<
-    "surveillant" | "corrector" | "jury" | null
+    "surveillant" | "corrector" | "jury" | "anonymat" | null
   >(null);
 
   // Form States
@@ -179,8 +179,12 @@ export default function StaffTab() {
     try {
       // 1. Fetch unassigned users filtering by role=STAFF from the global route to populate modal dropdown
       const usersRes = await api.get(`/api/v1/users?role=STAFF`);
-      const usersList = usersRes.data?.data?.users || usersRes.data?.users || usersRes.data?.data || [];
-      
+      const usersList =
+        usersRes.data?.data?.users ||
+        usersRes.data?.users ||
+        usersRes.data?.data ||
+        [];
+
       const mappedGlobalStaff = usersList.map((user: any) => ({
         id: user.id,
         initials: (user.firstName?.[0] || "U") + (user.lastName?.[0] || "S"),
@@ -197,13 +201,17 @@ export default function StaffTab() {
       const mappedAssignedStaff = assignedList.map((entry: any) => ({
         id: entry.userId || entry.user?.id,
         assignmentId: entry.id,
-        initials: (entry.user?.firstName?.[0] || "U") + (entry.user?.lastName?.[0] || "S"),
-        name: entry.user ? `${entry.user.firstName} ${entry.user.lastName}` : "Unknown User",
+        initials:
+          (entry.user?.firstName?.[0] || "U") +
+          (entry.user?.lastName?.[0] || "S"),
+        name: entry.user
+          ? `${entry.user.firstName} ${entry.user.lastName}`
+          : "Unknown User",
         role: entry.function || "STAFF",
         institution: entry.user?.institution,
       }));
+      console.log("Mapped assigned staff:", mappedAssignedStaff);
       setAssignedStaff(mappedAssignedStaff);
-
     } catch (error) {
       console.error("Error fetching staff data configuration:", error);
     }
@@ -230,14 +238,11 @@ export default function StaffTab() {
   }, [sessionId]);
 
   // Filtering local dashboard displays matching exact backend enums
-  const correctors = assignedStaff.filter(
-    (s) => s.role === "CORRECTOR",
-  );
-  const juryMembers = assignedStaff.filter(
-    (s) => s.role === "JURY_MEMBER",
-  );
-  const proctors = assignedStaff.filter(
-    (s) => s.role === "SURVEILLANT",
+  const correctors = assignedStaff.filter((s) => s.role === "CORRECTOR");
+  const juryMembers = assignedStaff.filter((s) => s.role === "JURY_MEMBER");
+  const proctors = assignedStaff.filter((s) => s.role === "SURVEILLANT");
+  const anonymatMembers = assignedStaff.filter(
+    (s) => s.role === "ANONYMAT_COMITE",
   );
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
@@ -267,6 +272,11 @@ export default function StaffTab() {
           userId: selectedUserId,
           function: "JURY_MEMBER",
         });
+      } else if (assignRole === "anonymat") {
+        await api.post(`/api/v1/sessions/${sessionId}/staff`, {
+          userId: selectedUserId,
+          function: "ANONYMAT_COMITE",
+        });
       }
 
       await fetchStaffData();
@@ -284,15 +294,16 @@ export default function StaffTab() {
 
     try {
       setActionLoading(member.assignmentId || member.id);
-      
+
       let backendFuncStr = "SURVEILLANT";
       if (role === "corrector") backendFuncStr = "CORRECTOR";
       if (role === "jury") backendFuncStr = "JURY_MEMBER";
+      if (role === "anonymat") backendFuncStr = "ANONYMAT_COMITE";
 
       await api.delete(
-        `/api/v1/sessions/${sessionId}/staff/${member.id}/${backendFuncStr}`
+        `/api/v1/sessions/${sessionId}/staff/${member.id}/${backendFuncStr}`,
       );
-      
+
       await fetchStaffData();
     } catch (error) {
       console.error(`Error removing:`, error);
@@ -301,7 +312,9 @@ export default function StaffTab() {
     }
   };
 
-  const openModal = (role: "surveillant" | "corrector" | "jury") => {
+  const openModal = (
+    role: "surveillant" | "corrector" | "jury" | "anonymat",
+  ) => {
     setAssignRole(role);
     setIsModalOpen(true);
   };
@@ -323,37 +336,13 @@ export default function StaffTab() {
 
   return (
     <div className="flex flex-col gap-8 w-full relative">
-      {/* Coordinator Section */}
-      <div className="flex flex-col gap-6 p-8 rounded-[20px] bg-white border border-[#3014B8]/10 shadow-lg">
-        <div className="flex flex-row justify-between items-center">
-          <h4
-            className="text-[16px] font-bold text-[#0F172A]"
-            style={{ fontFamily: "'Google Sans', sans-serif" }}
-          >
-            Coordinator
-          </h4>
-          <button className="px-4 py-1.5 rounded-[32px] text-[12px] font-bold text-[#3014B8] bg-[#3014B8]/5 border border-[#3014B8]/10 hover:bg-[#3014B8]/10 transition-colors">
-            Change
-          </button>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 flex items-center justify-center rounded-full text-[24px] font-bold text-[#3014B8] bg-[#3014B8]/10">
-            {coordinator.initials}
-          </div>
-          <div className="flex flex-col gap-1">
-            <span
-              className="text-[24px] font-bold text-[#0F172A]"
-              style={{ fontFamily: "'Google Sans', sans-serif" }}
-            >
-              {coordinator.name}
-            </span>
-            <span className="text-[12px] font-semibold uppercase tracking-[1.2px] text-[#64748B]">
-              {coordinator.role}
-            </span>
-          </div>
-        </div>
-      </div>
+      <SectionCard
+        title="Anonymity Committee (Comité d'anonymat)"
+        members={anonymatMembers}
+        onAssign={() => openModal("anonymat")}
+        onRemove={(m) => handleRemoveMember(m, "anonymat")}
+        removingId={actionLoading}
+      />
 
       <SectionCard
         title="Correctors"
@@ -385,7 +374,12 @@ export default function StaffTab() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
               <h3 className="text-[18px] font-bold text-[#0F172A] capitalize">
-                Assigner un {assignRole === "surveillant" ? "Surveillant" : assignRole}
+                Assigner un{" "}
+                {assignRole === "surveillant"
+                  ? "Surveillant"
+                  : assignRole === "anonymat"
+                    ? "Membre du Comité d'Anonymat"
+                    : assignRole}
               </h3>
               <button
                 onClick={closeModal}

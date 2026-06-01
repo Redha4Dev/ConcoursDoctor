@@ -79,6 +79,12 @@ export default function RoomDirectory() {
   const [editingSessionRoomId, setEditingSessionRoomId] = useState("");
   const [usedCapacityInput, setUsedCapacityInput] = useState<number | "">("");
 
+  // Assign Surveillant Modal State
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assigningSessionRoomId, setAssigningSessionRoomId] = useState("");
+  const [assignUserId, setAssignUserId] = useState("");
+  const [assignSubjectId, setAssignSubjectId] = useState("");
+
   // --- API Handlers ---
 
   const fetchSessionRooms = async () => {
@@ -106,7 +112,6 @@ export default function RoomDirectory() {
     }
   };
 
-  // Fetch Staff, Subjects, and Specializations for the Modal
   const fetchFormDependencies = async () => {
     if (!sessionId) return;
     try {
@@ -118,7 +123,6 @@ export default function RoomDirectory() {
         api.get(`/api/v1/sessions/${sessionId}/specializations`)
       ]);
 
-      // 1. Process Staff (Filter only SURVEILLANTS)
       const rawStaff = staffRes.data?.data || staffRes.data || [];
       const formattedStaff = rawStaff
         .filter((staffItem: any) => staffItem.function === "SURVEILLANT")
@@ -128,7 +132,6 @@ export default function RoomDirectory() {
         }));
       setAvailableStaff(formattedStaff);
 
-      // 2. Process Subjects
       const rawSubjects = subjectsRes.data?.data || subjectsRes.data || [];
       const formattedSubjects = rawSubjects.map((sub: any) => ({
         id: sub.id,
@@ -136,7 +139,6 @@ export default function RoomDirectory() {
       }));
       setAvailableSubjects(formattedSubjects);
 
-      // 3. Process Specializations
       const rawSpecs = specRes.data?.data || specRes.data || [];
       const formattedSpecs = rawSpecs.map((s: any) => ({
         id: s.id,
@@ -158,7 +160,6 @@ export default function RoomDirectory() {
     try {
       setIsSubmitting(true);
       
-      // 1. Prepare the exact payload expected by AddRoomToSessionDto
       const payload: any = { 
         roomId: selectedRoomId,
         specializationId: selectedSpecializationId 
@@ -168,14 +169,12 @@ export default function RoomDirectory() {
         payload.usedCapacity = Number(inputUsedCapacity);
       }
 
-      // 2. Add the room to the session
       const roomRes = await api.post(`/api/v1/sessions/${sessionId}/rooms`, payload);
       const newSessionRoomId = roomRes.data?.data?.id;
 
-      // 3. If room was created and we have surveillants to assign, assign them
       if (newSessionRoomId && surveillantAssignments.length > 0) {
         const assignmentPromises = surveillantAssignments
-          .filter(sa => sa.userId && sa.subjectId) // Only process filled pairs
+          .filter(sa => sa.userId && sa.subjectId)
           .map(sa => 
             api.post(`/api/v1/sessions/${sessionId}/rooms/${newSessionRoomId}/surveillants`, {
               userId: sa.userId,
@@ -190,7 +189,7 @@ export default function RoomDirectory() {
       closeAddModal();
     } catch (error) {
       console.error("Error linking room or assigning surveillants:", error);
-      alert("Une erreur est survenue. Vérifiez que la salle n'est pas déjà ajoutée ou que les affectations sont valides.");
+      alert("Une erreur est survenue.");
     } finally {
       setIsSubmitting(false);
     }
@@ -233,6 +232,28 @@ export default function RoomDirectory() {
     }
   };
 
+  // NEW: Dedicated Surveillant Assignment Handler
+  const handleAssignSurveillant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sessionId || !assigningSessionRoomId || !assignUserId || !assignSubjectId) return;
+
+    try {
+      setIsSubmitting(true);
+      await api.post(`/api/v1/sessions/${sessionId}/rooms/${assigningSessionRoomId}/surveillants`, {
+        userId: assignUserId,
+        subjectId: assignSubjectId
+      });
+      
+      closeAssignModal();
+      // Optional: Show a success toast here
+    } catch (error) {
+      console.error("Error assigning surveillant:", error);
+      alert("Erreur lors de l'assignation du surveillant.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAutoAssign = async () => {
     if (!sessionId) return;
     try {
@@ -256,7 +277,7 @@ export default function RoomDirectory() {
     setIsAddModalOpen(true);
     setSurveillantAssignments([]);
     fetchGlobalRooms();
-    fetchFormDependencies(); // Triggers staff, subjects, AND specializations
+    fetchFormDependencies();
   };
 
   const closeAddModal = () => {
@@ -279,7 +300,21 @@ export default function RoomDirectory() {
     setUsedCapacityInput("");
   };
 
-  // --- Dynamic Form Helpers ---
+  const openAssignModal = (sessionRoomId: string) => {
+    setAssigningSessionRoomId(sessionRoomId);
+    setAssignUserId("");
+    setAssignSubjectId("");
+    fetchFormDependencies();
+    setIsAssignModalOpen(true);
+  };
+
+  const closeAssignModal = () => {
+    setIsAssignModalOpen(false);
+    setAssigningSessionRoomId("");
+    setAssignUserId("");
+    setAssignSubjectId("");
+  };
+
   const addAssignmentRow = () => {
     setSurveillantAssignments([...surveillantAssignments, { userId: "", subjectId: "" }]);
   };
@@ -324,7 +359,7 @@ export default function RoomDirectory() {
           <div className="flex-1">Capacité (Utilisée / Max)</div>
           <div className="flex-1">Étage</div>
           <div className="flex-[1.5]">Bâtiment</div>
-          <div className="w-24 text-center">Actions</div>
+          <div className="w-32 text-center">Actions</div>
         </div>
 
         <div className="flex flex-col min-h-[150px]">
@@ -351,7 +386,15 @@ export default function RoomDirectory() {
                   <span className="bg-[#F0EEFF] text-[#3014B8] text-[12px] font-bold px-3 py-1 rounded-md">{sr.room.building}</span>
                 </div>
                 
-                <div className="w-24 flex justify-center gap-2">
+                <div className="w-32 flex justify-center gap-2">
+                  <button 
+                    onClick={() => openAssignModal(sr.id)}
+                    disabled={actionLoading === sr.id}
+                    className="p-2 text-slate-300 hover:text-[#10B981] transition-colors disabled:opacity-30"
+                    title="Assigner un surveillant"
+                  >
+                    <UserPlus size={16} />
+                  </button>
                   <button 
                     onClick={() => openEditModal(sr.id, sr.usedCapacity)}
                     disabled={actionLoading === sr.id}
@@ -385,7 +428,9 @@ export default function RoomDirectory() {
         </div>
       </div>
 
-      {/* Add Room Modal */}
+      {/* --- MODALS --- */}
+
+      {/* Add Room Modal (Original Logic) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -397,7 +442,6 @@ export default function RoomDirectory() {
             <form onSubmit={handleAddRoom} className="p-6 flex flex-col gap-6 max-h-[70vh] overflow-y-auto">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Room Selection */}
                 <div>
                   <label className="block text-[12px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                     Sélectionner la salle *
@@ -414,7 +458,6 @@ export default function RoomDirectory() {
                   </select>
                 </div>
 
-                {/* Specialization Selection */}
                 <div>
                   <label className="block text-[12px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                     Spécialisation *
@@ -432,7 +475,6 @@ export default function RoomDirectory() {
                 </div>
               </div>
 
-              {/* Optional Capacity Override */}
               <div>
                 <label className="block text-[12px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                   Capacité Utilisée (Optionnel)
@@ -447,7 +489,6 @@ export default function RoomDirectory() {
                 />
               </div>
 
-              {/* Surveillant Assignments */}
               <div className="border-t border-slate-100 pt-5">
                 <div className="flex items-center justify-between mb-4">
                   <label className="block text-[12px] font-bold text-slate-500 uppercase tracking-wide">
@@ -470,7 +511,7 @@ export default function RoomDirectory() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {surveillantAssignments.length === 0 ? (
-                      <p className="text-sm text-slate-400 italic">Aucun surveillant ajouté pour le moment.</p>
+                      <p className="text-sm text-slate-400 italic">Aucun surveillant ajouté.</p>
                     ) : (
                       surveillantAssignments.map((assignment, index) => (
                         <div key={index} className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -524,7 +565,7 @@ export default function RoomDirectory() {
         </div>
       )}
 
-      {/* Edit Capacity Modal */}
+      {/* Edit Capacity Modal (Reverted to original simplicity) */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -558,6 +599,74 @@ export default function RoomDirectory() {
           </div>
         </div>
       )}
+
+      {/* NEW: Assign Surveillant Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <h3 className="text-[18px] font-bold text-[#0F172A]">Assigner un surveillant</h3>
+              <button onClick={closeAssignModal} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAssignSurveillant} className="p-6 flex flex-col gap-5">
+              {isFormDependenciesLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="animate-spin text-[#3014B8]" size={24} />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-[12px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
+                      Surveillant *
+                    </label>
+                    <select
+                      required
+                      value={assignUserId}
+                      onChange={(e) => setAssignUserId(e.target.value)}
+                      className="w-full bg-[#F6F6F8] border-none rounded-xl py-3 px-4 text-[14px] text-slate-800 outline-none focus:ring-2 focus:ring-[#3014B8]/30 transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="">-- Sélectionner un surveillant --</option>
+                      {availableStaff.map(staff => (
+                        <option key={staff.id} value={staff.id}>{staff.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[12px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
+                      Sujet *
+                    </label>
+                    <select
+                      required
+                      value={assignSubjectId}
+                      onChange={(e) => setAssignSubjectId(e.target.value)}
+                      className="w-full bg-[#F6F6F8] border-none rounded-xl py-3 px-4 text-[14px] text-slate-800 outline-none focus:ring-2 focus:ring-[#3014B8]/30 transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="">-- Sélectionner un sujet --</option>
+                      {availableSubjects.map(subject => (
+                        <option key={subject.id} value={subject.id}>{subject.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 mt-4">
+                    <button type="button" onClick={closeAssignModal} className="px-5 py-2.5 text-[14px] font-bold text-slate-500">Annuler</button>
+                    <button 
+                      type="submit" 
+                      disabled={isSubmitting || !assignUserId || !assignSubjectId} 
+                      className="px-6 py-2.5 rounded-xl text-[14px] font-bold text-white bg-[#10B981] hover:bg-[#059669] disabled:opacity-50 flex items-center gap-2 transition-all"
+                    >
+                      {isSubmitting && <Loader2 size={16} className="animate-spin" />}
+                      Assigner
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

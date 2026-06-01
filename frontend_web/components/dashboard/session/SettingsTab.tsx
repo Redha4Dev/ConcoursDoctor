@@ -8,7 +8,8 @@ import {
   ArrowRight, 
   Settings2, 
   Clock, 
-  Loader2 
+  Loader2,
+  Lock
 } from "lucide-react";
 
 export default function ExamSettings() {
@@ -75,9 +76,17 @@ export default function ExamSettings() {
 
     try {
       setIsUpdatingStatus(true);
-      await api.patch(`/api/v1/sessions/${sessionId}/status`, {
-        status: selectedStatus
-      });
+
+      // Route to different endpoints based on the selected status
+      if (selectedStatus === "ATTENDANCE_LOCKED") {
+        await api.post(`/api/v1/attendance/${sessionId}/lock`, {
+          confirm: true
+        });
+      } else {
+        await api.patch(`/api/v1/sessions/${sessionId}/status`, {
+          status: selectedStatus
+        });
+      }
       
       // Update the badge to reflect the new successfully saved status
       setCurrentStatus(selectedStatus);
@@ -113,12 +122,14 @@ export default function ExamSettings() {
             <h3 className="text-[12px] font-bold text-[#3014B8] tracking-widest uppercase">
               Statut Actuel
             </h3>
-            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
+            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 ${
               currentStatus === 'draft' ? 'bg-[#FCE8E0] text-[#934834]' : 
               currentStatus === 'open' ? 'bg-[#E0FCE5] text-[#149334]' : 
+              currentStatus === 'ATTENDANCE_LOCKED' ? 'bg-[#FEF3C7] text-[#D97706]' : 
               'bg-[#E2E8F0] text-[#475569]'
             }`}>
-              {currentStatus}
+              {currentStatus === 'ATTENDANCE_LOCKED' && <Lock size={10} />}
+              {currentStatus === 'ATTENDANCE_LOCKED' ? 'PRÉSENCE VERROUILLÉE' : currentStatus}
             </span>
           </div>
 
@@ -138,6 +149,7 @@ export default function ExamSettings() {
             >
               <option value="draft">Brouillon (Draft)</option>
               <option value="open">Publié (Open)</option>
+              <option value="ATTENDANCE_LOCKED">Présence Verrouillée (Locked)</option>
               <option value="closed">Clôturé (Closed)</option>
             </select>
             <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
