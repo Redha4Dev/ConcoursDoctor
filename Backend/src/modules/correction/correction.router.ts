@@ -64,6 +64,13 @@ router.post(
   correctionCtrl.submitGrades,
 );
 
+// GET eligible third correctors for a discrepancy copy
+router.get(
+  "/:sessionId/copies/:copyId/eligible-correctors",
+  restrictTo("ADMIN", "COORDINATOR"),
+  correctionCtrl.getEligibleThirdCorrectors,
+);
+
 /**
  * GET /api/v1/correction/copies/:copyId
  * Returns copy detail for an assigned corrector.

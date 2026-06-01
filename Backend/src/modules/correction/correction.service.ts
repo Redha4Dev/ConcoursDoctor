@@ -427,27 +427,19 @@ export const getDiscrepancies = async (sessionId: string) => {
 export const assignThirdCorrector = async (
   sessionId: string,
   copyId: string,
-  correctorId: string, // the proposed third corrector (thirdCorrectorId in the spec)
+  correctorId: string,
   userId: string,
   ipAddress?: string,
   userAgent?: string,
 ) => {
-  // ── 1. Fetch the target ExamCopy and verify it is in DISCREPANCY status ───
-  //    We include the existing CorrectorAssignment rows so we can identify
-  //    which correctors own Round 1 and Round 2 for this specific copy.
   const copy = await correctionDb.examCopy.findUnique({
     where: { id: copyId },
-    include: {
-      // assignments carries round + correctorId for every round on this copy
-      assignments: { select: { correctorId: true, round: true } },
-    },
+    include: { assignments: { select: { correctorId: true, round: true } } },
   });
 
   if (!copy) throw new AppError("Copy not found", 404);
-  if (copy.sessionId !== sessionId) {
+  if (copy.sessionId !== sessionId)
     throw new AppError("Copy does not belong to this session", 400);
-  }
-  // Status guard — only DISCREPANCY copies may receive a third corrector
   if (copy.status !== "DISCREPANCY") {
     throw new AppError(
       `Copy must be in DISCREPANCY status (current: ${copy.status})`,
@@ -455,49 +447,44 @@ export const assignThirdCorrector = async (
     );
   }
 
-  // ── 2. Identify the Round-1 and Round-2 correctors for this copy ──────────
-  //    We resolve from CorrectorAssignment records (set during openCorrectionPhase)
-  //    rather than CorrectionGrade so the check works even if one corrector
-  //    has not yet submitted their grade.
-  const round1Assignment = copy.assignments.find((a) => a.round === 1);
-  const round2Assignment = copy.assignments.find((a) => a.round === 2);
+  // FIX 1 — check round 3 not already assigned
+  const existingRound3 = copy.assignments.find((a) => a.round === 3);
+  if (existingRound3) {
+    throw new AppError(
+      "A third corrector is already assigned. Remove them first or use replace endpoint.",
+      409,
+    );
+  }
 
-  // Defensive: both rounds must exist for a copy to be in DISCREPANCY
-  const round1CorrectorId = round1Assignment?.correctorId ?? null;
-  const round2CorrectorId = round2Assignment?.correctorId ?? null;
+  const round1CorrectorId =
+    copy.assignments.find((a) => a.round === 1)?.correctorId ?? null;
+  const round2CorrectorId =
+    copy.assignments.find((a) => a.round === 2)?.correctorId ?? null;
 
-  // ── 3. Validate proposed third corrector against the subject pool ──────────
-  //    They must hold a SessionStaff record with function=CORRECTOR for the
-  //    same subjectId as this copy — i.e. they are in the subject's pool.
+  // FIX 2 — validate in subject pool
   const staffRecord = await identityDb.sessionStaff.findFirst({
     where: {
       sessionId,
       userId: correctorId,
       function: "CORRECTOR",
-      subjectId: copy.subjectId, // must match the subject of the discrepancy copy
+      subjectId: copy.subjectId,
     },
   });
-
   if (!staffRecord) {
-    // Proposed corrector is not in the correct subject pool at all
     throw new AppError(
-      "Third corrector must be an unassigned corrector from the same subject pool",
+      "Selected corrector is not in the subject pool for this session",
       400,
     );
   }
 
-  // ── 4. Enforce the "unused corrector" constraint ──────────────────────────
-  //    The third corrector MUST NOT be the same person who graded Round 1
-  //    or Round 2, regardless of whether they are in the subject pool.
+  // FIX 3 — not already on this copy
   if (correctorId === round1CorrectorId || correctorId === round2CorrectorId) {
-    // The requested corrector already touched this paper in a previous round
     throw new AppError(
-      "Third corrector must be an unassigned corrector from the same subject pool",
+      "Selected corrector already graded this copy in round 1 or 2. Choose an eligible corrector.",
       400,
     );
   }
 
-  // ── 5. Create round-3 assignment ──────────────────────────────────────────
   await correctionDb.correctorAssignment.create({
     data: {
       copyId,
@@ -508,7 +495,6 @@ export const assignThirdCorrector = async (
     },
   });
 
-  // ── 6. Audit ──────────────────────────────────────────────────────────────
   audit({
     userId,
     action: "THIRD_CORRECTOR_ASSIGNED",
@@ -1049,4 +1035,73 @@ export const getCopyDetail = async (correctorId: string, copyId: string) => {
   }
 
   return response;
+};
+
+export const getEligibleThirdCorrectors = async (
+  sessionId: string,
+  copyId: string,
+) => {
+  // 1. get the copy and its existing assignments
+  const copy = await correctionDb.examCopy.findUnique({
+    where: { id: copyId },
+    include: { assignments: { select: { correctorId: true, round: true } } },
+  });
+  if (!copy) throw new AppError("Copy not found", 404);
+  if (copy.sessionId !== sessionId)
+    throw new AppError("Copy does not belong to this session", 400);
+  if (copy.status !== "DISCREPANCY") {
+    throw new AppError(
+      `Copy must be in DISCREPANCY status (current: ${copy.status})`,
+      400,
+    );
+  }
+
+  // 2. collect already-assigned corrector IDs for this copy
+  const usedCorrectorIds = new Set(copy.assignments.map((a) => a.correctorId));
+
+  // 3. get all correctors in the subject pool for this session
+  const allCorrectors = await identityDb.sessionStaff.findMany({
+    where: {
+      sessionId,
+      function: "CORRECTOR",
+      subjectId: copy.subjectId,
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          institution: true,
+          academicGrade: true,
+          specialization: true,
+        },
+      },
+    },
+  });
+
+  // 4. filter out already-assigned correctors
+  const eligible = allCorrectors
+    .filter((s) => !usedCorrectorIds.has(s.userId))
+    .map((s) => ({
+      userId: s.userId,
+      firstName: s.user.firstName,
+      lastName: s.user.lastName,
+      email: s.user.email,
+      institution: s.user.institution,
+      academicGrade: s.user.academicGrade,
+    }));
+
+  return {
+    copyId,
+    anonymousCode: copy.anonymousCode,
+    subjectId: copy.subjectId,
+    usedCorrectors: copy.assignments.map((a) => ({
+      correctorId: a.correctorId,
+      round: a.round,
+    })),
+    eligibleCorrectors: eligible,
+    totalEligible: eligible.length,
+  };
 };
