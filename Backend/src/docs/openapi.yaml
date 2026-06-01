@@ -62,6 +62,8 @@ tags:
     description: Exam grading, anonymous copy evaluation, and coordinator discrepancy management
   - name: Anonymization
     description: Physical paper label-printing helpers — code listing, single-code lookup, and per-subject statistics
+  - name: Deliberation
+    description: Computation, ranking, closing, and PV (Process-Verbal) document retrieval for deliberation sessions.
 
 # ─── REUSABLE COMPONENTS ──────────────────────────────────────────────────────
 components:
@@ -1866,6 +1868,293 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DiscrepancyItem"
+
+    # ── Deliberation ──────────────────────────────────────────────────────────
+    AdmissionResult:
+      type: string
+      enum:
+        - "Admis(e)"
+        - "En liste d'attente"
+        - "Ajourné(e)"
+      example: "Admis(e)"
+
+    SubjectGrade:
+      type: object
+      required:
+        - subjectId
+        - subjectName
+        - coefficient
+        - grade
+        - anonymousCode
+      properties:
+        subjectId:
+          type: string
+          format: uuid
+          example: d3b07384-d113-49c3-a55e-eed3b0738401
+        subjectName:
+          type: string
+          example: Génie Logiciel
+        coefficient:
+          type: number
+          example: 2
+        grade:
+          type: number
+          example: 14.5
+        anonymousCode:
+          type: string
+          example: DOCT-2025/2026-A3F9
+
+    RankedCandidate:
+      type: object
+      required:
+        - rank
+        - candidateId
+        - registrationNumber
+        - firstName
+        - lastName
+        - email
+        - anonymousCodes
+        - subjectGrades
+        - weightedAverage
+        - result
+      properties:
+        rank:
+          type: integer
+          example: 1
+        candidateId:
+          type: string
+          format: uuid
+          example: d3b07384-d113-49c3-a55e-eed3b0738402
+        registrationNumber:
+          type: string
+          example: CAND-0042
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: Doe
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: john.doe@example.com
+        anonymousCodes:
+          type: object
+          additionalProperties:
+            type: string
+          description: A map of subjectId to the assigned anonymousCode for this candidate
+          example:
+            "d3b07384-d113-49c3-a55e-eed3b0738401": "DOCT-2025/2026-A3F9"
+        subjectGrades:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectGrade"
+        weightedAverage:
+          type: number
+          example: 13.75
+        result:
+          $ref: "#/components/schemas/AdmissionResult"
+
+    DeliberationResult:
+      type: object
+      required:
+        - sessionId
+        - specializationId
+        - specializationName
+        - availableSlots
+        - waitingListSlots
+        - rankedCandidates
+        - computedAt
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          example: d3b07384-d113-49c3-a55e-eed3b0738403
+        specializationId:
+          type: string
+          format: uuid
+          example: d3b07384-d113-49c3-a55e-eed3b0738404
+        specializationName:
+          type: string
+          example: Systèmes Intelligents
+        availableSlots:
+          type: integer
+          example: 5
+        waitingListSlots:
+          type: integer
+          example: 3
+        rankedCandidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/RankedCandidate"
+        computedAt:
+          type: string
+          format: date-time
+          example: "2026-06-01T20:00:00Z"
+
+    WarningCandidate:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - weightedAverage
+        - rank
+      properties:
+        firstName:
+          type: string
+          example: Jane
+        lastName:
+          type: string
+          example: Smith
+        weightedAverage:
+          type: number
+          example: 9.8
+        rank:
+          type: integer
+          example: 12
+
+    DeliberationStats:
+      type: object
+      required:
+        - specializationId
+        - specializationName
+        - total
+        - admitted
+        - waitlisted
+        - rejected
+        - warningCandidates
+      properties:
+        specializationId:
+          type: string
+          format: uuid
+          example: d3b07384-d113-49c3-a55e-eed3b0738404
+        specializationName:
+          type: string
+          example: Systèmes Intelligents
+        total:
+          type: integer
+          example: 25
+        admitted:
+          type: integer
+          example: 5
+        waitlisted:
+          type: integer
+          example: 3
+        rejected:
+          type: integer
+          example: 17
+        warningCandidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/WarningCandidate"
+
+    ComputeDeliberationResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Délibération calculée avec succès.
+        data:
+          type: object
+          required:
+            - sessionId
+            - stats
+            - xlsxPath
+            - emailSent
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+              example: d3b07384-d113-49c3-a55e-eed3b0738403
+            stats:
+              type: array
+              items:
+                $ref: "#/components/schemas/DeliberationStats"
+            xlsxPath:
+              type: string
+              example: /exports/delib-session-d3b0.xlsx
+            emailSent:
+              type: boolean
+              example: true
+
+    RankingResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+            - sessionId
+            - specializations
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+              example: d3b07384-d113-49c3-a55e-eed3b0738403
+            specializations:
+              type: array
+              items:
+                $ref: "#/components/schemas/DeliberationResult"
+
+    SpecializationRankingResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/DeliberationResult"
+
+    CloseDeliberationResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Session clôturée. 5 email(s) envoyé(s) aux candidats.
+        data:
+          type: object
+          required:
+            - sessionId
+            - pvAnonymatPath
+            - pvNominatifPath
+            - candidateEmailsSent
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+              example: d3b07384-d113-49c3-a55e-eed3b0738403
+            pvAnonymatPath:
+              type: string
+              example: /exports/pv-anonyme-session-d3b0.docx
+            pvNominatifPath:
+              type: string
+              example: /exports/pv-nominatif-session-d3b0.docx
+            candidateEmailsSent:
+              type: integer
+              example: 5
 
 # ─── SECURITY DEFAULT ─────────────────────────────────────────────────────────
 security:
@@ -5341,3 +5630,209 @@ paths:
             or global `ADMIN` / `COORDINATOR` role
         "404":
           description: Session not found
+
+  /api/v1/deliberation/{sessionId}/compute:
+    post:
+      summary: Compute deliberation for a session
+      description: |
+        Calculates candidates' average grades, assigns rankings, and determines admission status.
+        Generates an Excel export of the deliberation results and optionally sends notifications.
+
+        **Access:** Global `ADMIN` or `COORDINATOR` role.
+      tags: [Deliberation]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Deliberation computed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComputeDeliberationResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — requires `ADMIN` or `COORDINATOR` role
+        "404":
+          description: Session not found
+
+  /api/v1/deliberation/{sessionId}/ranking:
+    get:
+      summary: Get ranking for all specializations in a session
+      description: |
+        Retrieves the complete ranked lists of candidates for all doctoral specializations
+        within a session.
+
+        **Access:** Global `ADMIN`, `COORDINATOR`, or `STAFF` role.
+      tags: [Deliberation]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Rankings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankingResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — requires `ADMIN`, `COORDINATOR`, or `STAFF` role
+        "404":
+          description: Session not found
+
+  /api/v1/deliberation/{sessionId}/ranking/{specializationId}:
+    get:
+      summary: Get ranking for a specific specialization in a session
+      description: |
+        Retrieves the ranked list of candidates for a single, specific doctoral specialization.
+
+        **Access:** Global `ADMIN`, `COORDINATOR`, or `STAFF` role.
+      tags: [Deliberation]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+        - name: specializationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The doctoral specialization ID
+      responses:
+        "200":
+          description: Specialization ranking retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecializationRankingResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — requires `ADMIN`, `COORDINATOR`, or `STAFF` role
+        "404":
+          description: Session or specialization not found within this session
+
+  /api/v1/deliberation/{sessionId}/close:
+    post:
+      summary: Close deliberation for a session
+      description: |
+        Finalizes the deliberation process for the session, closes the competition,
+        generates the official anonymous and nominative Process-Verbal (PV) documents,
+        and emails results to the candidates.
+
+        **Access:** Global `ADMIN` or `COORDINATOR` role.
+      tags: [Deliberation]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Session closed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloseDeliberationResponse"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — requires `ADMIN` or `COORDINATOR` role
+        "404":
+          description: Session not found
+
+  /api/v1/deliberation/{sessionId}/pv/anonymat:
+    get:
+      summary: Download anonymous Process-Verbal (PV) document
+      description: |
+        Serves/downloads the generated anonymous Process-Verbal document in Word format (.docx).
+
+        **Access:** Global `ADMIN` or `COORDINATOR` role.
+      tags: [Deliberation]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Anonymous PV file downloaded successfully
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — requires `ADMIN` or `COORDINATOR` role
+        "404":
+          description: Session or PV file not found
+
+  /api/v1/deliberation/{sessionId}/pv/nominatif:
+    get:
+      summary: Download nominative Process-Verbal (PV) document
+      description: |
+        Serves/downloads the generated nominative Process-Verbal document in Word format (.docx).
+
+        **Access:** Global `ADMIN` or `COORDINATOR` role.
+      tags: [Deliberation]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The competition session ID
+      responses:
+        "200":
+          description: Nominative PV file downloaded successfully
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Not authenticated
+        "403":
+          description: Forbidden — requires `ADMIN` or `COORDINATOR` role
+        "404":
+          description: Session or PV file not found
+

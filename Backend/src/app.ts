@@ -20,6 +20,7 @@ import type { Request, Response, NextFunction } from "express";
 import { attendanceRouter } from "./modules/attendance/attendance.router.js";
 import correctionRouter from "./modules/correction/correction.router.js";
 import anonymizationRouter from "./modules/anonymization/anonymization.router.js";
+import deliberationRouter from "./modules/deliberation/deliberation.router.js";
 
 import { AppError } from "./utils/AppError.js";
 
@@ -54,6 +55,7 @@ app.use("/api/v1/rooms", roomsRouter);
 app.use("/api/v1/attendance", attendanceRouter);
 app.use("/api/v1/correction", correctionRouter);
 app.use("/api/v1/anonymization", anonymizationRouter);
+app.use("/api/v1/deliberation", deliberationRouter);
 
 // This works perfectly in all Express versions
 app.use((req: Request, res: Response, next: NextFunction) => {
