@@ -10,7 +10,8 @@ export const restrictToSessionFunction = (
   requiredFunction: SessionFunction,
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const sessionId = req.params.sessionId as string; // Assuming sessionId is passed as a URL parameter
+    const sessionId =
+      (req.params.sessionId as string) || (req.query.sessionId as string); // Assuming sessionId is passed as a URL parameter or query parameter
 
     if (!sessionId) {
       return next(
