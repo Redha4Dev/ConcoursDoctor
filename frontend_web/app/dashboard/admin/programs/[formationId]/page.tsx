@@ -256,7 +256,7 @@ export default function ProgramDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F9FA] gap-4">
         <p className="text-red-500 font-medium">{error || "Program not found"}</p>
-        <button onClick={() => router.push("/dashboard/programs")} className="text-[#3014B8] underline">
+        <button onClick={() => router.push("/dashboard/admin/programs")} className="text-[#3014B8] underline">
           Return to Programs
         </button>
       </div>
@@ -272,7 +272,7 @@ export default function ProgramDetailPage() {
     >
       {/* Breadcrumb */}
       <button
-        onClick={() => router.push("/dashboard/programs")}
+        onClick={() => router.push("/dashboard/admin/programs")}
         className="flex items-center gap-2 text-[16px] font-bold text-[#0F172A] hover:opacity-70 transition-opacity"
         style={{ fontFamily: "'Google Sans', sans-serif" }}
       >
@@ -566,7 +566,7 @@ export default function ProgramDetailPage() {
                     key={session.id}
                     className="flex flex-row items-center w-full cursor-pointer hover:bg-[#F8F9FA] transition-colors"
                     style={{ height: 83 }}
-                    onClick={() => router.push(`/dashboard/programs/${program.id}/${session.id}`)}
+                    onClick={() => router.push(`/dashboard/admin/programs/${program.id}/${session.id}`)}
                   >
                     <div className="flex-1 px-4">
                       <span className="text-[16px] font-bold text-[#0F172A]" style={{ fontFamily: "'Google Sans', sans-serif" }}>{session.academicYear}</span>

@@ -10,9 +10,10 @@ import RoomDirectory from "@/components/dashboard/session/RoomsTab";
 import ExamSettings from "@/components/dashboard/session/SettingsTab";
 import SpecializationTab from "@/components/dashboard/session/SpecializationTab";
 import AnonymatSettings from "@/components/dashboard/session/AonymatTab";
+import CorrectionTab from "@/components/dashboard/session/CorrectionTab";
 
 // Tab type translations
-type TabType = "Candidates" | "Subjects" | "Staff" | "Rooms" | "Settings" | "Specialization" | "Anonymat";
+type TabType = "Candidates" | "Subjects" | "Staff" | "Rooms" | "Specialization" | "Anonymat" | "Correction" | "Settings"; // <-- Added "Correction"
 
 export default function SessionPage() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function SessionPage() {
     "Rooms",
     "Specialization",
     "Anonymat",
+    "Correction", // <-- Added to navigation layout
     "Settings",
   ];
 
@@ -34,7 +36,7 @@ export default function SessionPage() {
     <div className="flex flex-col gap-4 p-8 w-full bg-[#F8F9FA] min-h-screen">
       {/* Breadcrumb */}
       <button
-        onClick={() => router.push(`/dashboard/programs/${programId}`)}
+        onClick={() => router.push(`/dashboard/admin/programs/${programId}`)}
         className="flex items-center gap-2 text-[18px] font-bold text-[#0F172A] hover:opacity-70 transition-opacity"
         style={{ fontFamily: "'Inter', sans-serif" }}
       >
@@ -75,7 +77,7 @@ export default function SessionPage() {
               }`}
               style={{ fontFamily: "'Google Sans', sans-serif" }}
             >
-              {tab}
+              {tab === "Anonymat" ? "Anonymat" : tab === "Correction" ? "Correction" : tab}
             </button>
           ))}
         </div>
@@ -86,17 +88,11 @@ export default function SessionPage() {
         {activeTab === "Candidates" && <CandidatesTab />}
         {activeTab === "Staff" && <StaffTab />}
         {activeTab === "Subjects" && <SubjectsPage />} 
-          {activeTab === "Rooms" && <RoomDirectory />} 
-          {activeTab === "Specialization" && <SpecializationTab />}
-          {activeTab === "Anonymat" && <AnonymatSettings />}
-          {activeTab === "Settings" && <ExamSettings />}
-          {/* {(activeTab === "Settings") && (
-          <div className="flex items-center justify-center h-64 bg-white rounded-[20px] border border-[rgba(48,20,184,0.1)]">
-            <p className="text-[#64748B]" style={{ fontFamily: "'Google Sans', sans-serif" }}>
-              {activeTab} Section — coming soon
-            </p>
-          </div>
-        )} */}
+        {activeTab === "Rooms" && <RoomDirectory />} 
+        {activeTab === "Specialization" && <SpecializationTab />}
+        {activeTab === "Anonymat" && <AnonymatSettings />}
+        {activeTab === "Correction" && <CorrectionTab />} {/* <-- Added View Mapping */}
+        {activeTab === "Settings" && <ExamSettings />}
       </div>
     </div>
   );

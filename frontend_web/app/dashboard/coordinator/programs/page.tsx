@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, BookOpen, HelpCircle, Download } from "lucide-react";
-import CreateFormationModal from "@/components/dashboard/CreateFormationModal";
+import { BookOpen, HelpCircle, Download } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 type FilterType = "All" | "Active" | "Inactive";
 type StatusType = "active" | "inactive";
@@ -16,42 +16,12 @@ interface Program {
   department: string;
   description: string;
   isActive: boolean;
-  createdAt: string; // or Date if you parse it
+  createdAt: string; 
   _count: {
     sessions: number;
     staff: number;
   };
 }
-
-// const PROGRAMS: Program[] = [
-//   {
-//     id: "1",
-//     name: "PhD Computer Science",
-//     subtitle: "Distributed Systems & AI",
-//     code: "INFO-2026",
-//     department: "Computer Science",
-//     sessions: 3,
-//     status: "active",
-//   },
-//   {
-//     id: "2",
-//     name: "PhD Mathematics",
-//     subtitle: "Complex Analysis & Algebra",
-//     code: "MATH-2026",
-//     department: "Mathematics",
-//     sessions: 1,
-//     status: "active",
-//   },
-//   {
-//     id: "3",
-//     name: "PhD Physics",
-//     subtitle: "Quantum Physics",
-//     code: "PHYS-2026",
-//     department: "Physics",
-//     sessions: 0,
-//     status: "inactive",
-//   },
-// ];
 
 const StatusBadge = ({ status }: { status: StatusType }) => {
   if (status === "active") {
@@ -74,19 +44,21 @@ const StatusBadge = ({ status }: { status: StatusType }) => {
   );
 };
 
-export default function ProgramsPage() {
+export default function CoordinatorProgramsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [filter, setFilter] = useState<FilterType>("All");
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-
   const fetchPrograms = async () => {
+    if (!user?.id) return;
     try {
       setIsLoading(true);
-     const response = await api.get("/api/v1/formations"); 
+      const response = await api.get("/api/v1/formations", {
+        params: { coordinatorId: user.id }
+      }); 
       if(response.data && response.data.success) {
         setPrograms(response.data.data); 
       }
@@ -99,10 +71,10 @@ export default function ProgramsPage() {
 
   React.useEffect(() => {
     fetchPrograms();
-  }, []);
+  }, [user?.id]);
   
 
- const activeCount = programs.filter((p) => p.isActive === true).length;
+  const activeCount = programs.filter((p) => p.isActive === true).length;
   const inactiveCount = programs.filter((p) => p.isActive === false).length;
 
   const filtered = programs.filter((p) => {
@@ -120,22 +92,9 @@ export default function ProgramsPage() {
             className="text-[36px] font-bold leading-[45px] text-[#0F172A]"
             style={{ fontFamily: "'Google Sans', sans-serif" }}
           >
-            Doctoral Programs
+            My Programs
           </h1>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-[32px] text-white font-bold text-[16px]"
-          style={{
-            background: "linear-gradient(103.23deg, #1C0087 0%, #3014B8 100%)",
-            boxShadow:
-              "0px 10px 15px -3px rgba(99,102,241,0.2), 0px 4px 6px -4px rgba(99,102,241,0.2)",
-            fontFamily: "'Google Sans', sans-serif",
-          }}
-        >
-          <Plus size={14} className="text-white" />
-          New Program
-        </button>
       </div>
 
       {/* Table Section */}
@@ -256,7 +215,7 @@ export default function ProgramsPage() {
                   }`}
                   style={{ height: 88 }}
                   onClick={() =>
-                    router.push(`/dashboard/programs/${program.id}`)
+                    router.push(`/dashboard/coordinator/programs/${program.id}`)
                   }
                 >
                   {/* Name + icon */}
@@ -332,7 +291,7 @@ export default function ProgramsPage() {
                   <div className="w-[108px] px-8 flex justify-end">
                     <button
                       onClick={(e) => {
-                        e.stopPropagation();
+                         e.stopPropagation();
                       }}
                       className="flex items-center justify-center w-5 h-8 hover:bg-gray-100 rounded"
                     >
@@ -436,7 +395,7 @@ export default function ProgramsPage() {
                 className="text-[14px] text-[#64748B] mt-1"
                 style={{ fontFamily: "'Google Sans', sans-serif" }}
               >
-                How to deactivate an existing doctoral program?
+                Need to manage sessions for a program? Click on it above.
               </p>
               <button
                 className="mt-3 text-[12px] font-bold text-[#1C0087] self-start"
@@ -492,14 +451,6 @@ export default function ProgramsPage() {
           </div>
         </div>
       </div>
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <CreateFormationModal 
-        onClose={() => setShowCreateModal(false)}
-        onSuccess={() => fetchPrograms()}
-        />
-      )}
     </div>
   );
 }

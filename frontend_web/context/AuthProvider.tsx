@@ -4,8 +4,20 @@ import { createContext, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { api } from "@/lib/api";
 
-type AuthContextType = {
-  user: any;
+export interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'ADMIN' | 'COORDINATOR' | 'STAFF' | string;
+  sessionStaff?: Array<{
+    function: string;
+    [key: string]: any;
+  }>;
+}
+
+export type AuthContextType = {
+  user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
