@@ -802,10 +802,13 @@ export const submitGrades = async (
     where: { correctorId, subjectId, sessionId },
     include: {
       copy: {
-        select: { id: true, status: true, anonymousCode: true },
         include: {
-          assignments: { select: { correctorId: true, round: true } },
-          grades: { select: { round: true, grade: true, correctorId: true } },
+          assignments: {
+            select: { correctorId: true, round: true },
+          },
+          grades: {
+            select: { round: true, grade: true, correctorId: true },
+          },
         },
       },
     },
