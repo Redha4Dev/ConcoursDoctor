@@ -20,11 +20,12 @@ function CustomBottomTabBar({ state, descriptors, navigation }) {
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
 
-        // 🔴 BULLETPROOF FIX: Force-ignore any routes matching change-password OR shifts
+        // 🔴 BULLETPROOF FIX: Force-ignore any routes matching change-password, shifts, or anonymat
         if (
           options.href === null || 
           route.name.includes("change-password") ||
-          route.name.includes("shifts") // <-- Added this condition
+          route.name.includes("shifts") ||
+          route.name.includes("anonymat") // <-- Added this condition
         ) {
           return null;
         }
@@ -122,6 +123,11 @@ export default function HomeLayout() {
 
       <Tabs.Screen
         name="shifts/[id]/index"
+        options={{ href: null, headerShown: false }} 
+      />
+
+      <Tabs.Screen
+        name="anonymat/scan/[sessionId]"
         options={{ href: null, headerShown: false }} 
       />
     </Tabs>

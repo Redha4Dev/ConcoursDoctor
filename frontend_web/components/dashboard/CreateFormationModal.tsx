@@ -1,13 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { api } from "@/lib/api";
-import { Input } from "../ui/input";
+
+interface Coordinator {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
 
 interface Props {
   onClose: () => void;
-  onSuccess: () => void; 
+  onSuccess: () => void;
 }
 
 export default function CreateFormationModal({ onClose, onSuccess }: Props) {
@@ -16,6 +22,25 @@ export default function CreateFormationModal({ onClose, onSuccess }: Props) {
   const [department, setDepartment] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
+  const [coordinator, setCoordinator] = useState("");
+
+  useEffect(() => {
+    const fetchCoordinators = async () => {
+      try {
+        const response = await api.get("/api/v1/users", {
+          params: { role: "COORDINATOR", limit: 100 },
+        });
+        if (response.status === 200) {
+          setCoordinators(response.data.data.users);
+        }
+      } catch (error) {
+        console.error("Failed to fetch coordinators:", error);
+      }
+    };
+
+    fetchCoordinators();
+  }, []);
 
   const CreateFormation = async (name: string, code: string, department: string, description: string) => {
     try {
@@ -152,6 +177,35 @@ export default function CreateFormationModal({ onClose, onSuccess }: Props) {
                 }}
               />
             </div>
+          </div>
+
+          {/* Coordinator Field */}
+          <div className="flex flex-col gap-2 flex-1">
+            <div className="flex items-center gap-2">
+              <label
+                className="text-[14px] font-bold text-[#64748B]"
+                style={{ fontFamily: "'Google Sans', sans-serif" }}
+              >
+                Coordinator
+              </label>
+              <span className="text-[14px] font-bold text-[#BA1A1A]">*</span>
+            </div>
+            <select
+              value={coordinator}
+              onChange={(e) => setCoordinator(e.target.value)}
+              className="w-full px-4 py-3 rounded-[8px] text-[14px] text-[#0F172A] outline-none"
+              style={{
+                background: "#F6F6F8",
+                fontFamily: "'Google Sans', sans-serif",
+              }}
+            >
+              <option value="">Choose a Coordinator</option>
+              {coordinators.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.firstName} {c.lastName}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Description Field */}

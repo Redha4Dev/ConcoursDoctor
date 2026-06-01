@@ -81,11 +81,11 @@ export default function SettingsScreen() {
         >
           <View className="flex-row items-center flex-1">
             <View className="w-14 h-14 bg-[#EEEBFF] rounded-full items-center justify-center mr-4">
-              <Text className="text-[#311B92] text-[18px] font-black">{user.firstName.charAt(0) + user.lastName.charAt(0)}</Text>
+              <Text className="text-[#311B92] text-[18px] font-black">{user?.firstName.charAt(0) + user?.lastName.charAt(0)}</Text>
             </View>
             <View className="flex-1">
               <Text className="text-[18px] font-bold text-[#1F2937] mb-1">
-                Dr. {user.firstName + " " + user.lastName}
+                Dr. {user?.firstName + " " + user?.lastName}
               </Text>
               <View className="bg-[#EEEBFF] self-start px-2.5 py-0.5 rounded-md">
                 <Text className="text-[#311B92] text-[11px] font-bold tracking-wide uppercase">
