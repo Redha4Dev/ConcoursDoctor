@@ -389,3 +389,219 @@ export const surveillantRoomAssignmentTemplate = (
 </html>
   `,
 });
+
+import type {
+  AdmissionResult,
+  DeliberationStats,
+} from "../modules/deliberation/deliberation.types.js";
+
+// ─── DELIBERATION COORDINATOR EMAIL ──────────────────────────────────────────
+
+export function deliberationCoordinatorTemplate(
+  coordinatorName: string,
+  sessionLabel: string,
+  stats: DeliberationStats[],
+): { subject: string; html: string } {
+  const statsRows = stats
+    .map(
+      (s) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;color:#444;">${s.specializationName}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;color:#166534;font-weight:600;">${s.admitted}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;color:#92400e;font-weight:600;">${s.waitlisted}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;color:#991b1b;font-weight:600;">${s.rejected}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const allWarnings = stats.flatMap((s) => s.warningCandidates);
+  const warningBlock =
+    allWarnings.length > 0
+      ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;margin-bottom:24px;">
+      <tr><td style="padding:14px 18px;">
+        <p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#92400e;">
+          ⚠️ Attention — Candidats admis avec moyenne inférieure à 10/20
+        </p>
+        <table width="100%" cellpadding="6" style="border-collapse:collapse;">
+          <tr>
+            <th style="text-align:left;font-size:13px;color:#92400e;border-bottom:1px solid #fde68a;padding-bottom:6px;">Nom</th>
+            <th style="text-align:center;font-size:13px;color:#92400e;border-bottom:1px solid #fde68a;">Moyenne</th>
+            <th style="text-align:center;font-size:13px;color:#92400e;border-bottom:1px solid #fde68a;">Rang</th>
+          </tr>
+          ${allWarnings
+            .map(
+              (w) => `
+          <tr>
+            <td style="font-size:13px;color:#444;padding:4px 0;">${w.lastName} ${w.firstName}</td>
+            <td style="font-size:13px;text-align:center;font-weight:600;color:#991b1b;">${w.weightedAverage}/20</td>
+            <td style="font-size:13px;text-align:center;">${w.rank}</td>
+          </tr>`,
+            )
+            .join("")}
+        </table>
+      </td></tr>
+    </table>`
+      : "";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>* { font-family: 'Plus Jakarta Sans', Arial, sans-serif !important; }</style>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f8;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+        <tr><td style="background:#3014B8;padding:28px 40px;text-align:center;">
+          <img src="https://res.cloudinary.com/dsztqioey/image/upload/v1776104664/concour_doctora_logo_lm6aqv.png"
+               alt="ConcourDoctora" width="200" height="38" style="display:block;margin:0 auto;" />
+        </td></tr>
+        <tr><td style="padding:40px;">
+          <p style="font-size:15px;color:#444;margin:0 0 8px;">Bonjour <strong style="color:#1a1a1a;">${coordinatorName}</strong>,</p>
+          <h1 style="font-size:22px;color:#3014B8;margin:0 0 20px;">Résultats de délibération disponibles</h1>
+          <p style="font-size:15px;color:#444;line-height:1.7;margin:0 0 24px;">
+            La délibération pour la session <strong style="color:#3014B8;">${sessionLabel}</strong> a été calculée.
+            Veuillez trouver ci-dessous le récapitulatif des résultats.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f3ff;border-left:4px solid #3014B8;border-radius:0 8px 8px 0;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#3014B8;text-transform:uppercase;">Récapitulatif par spécialité</p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <th style="text-align:left;font-size:13px;color:#666;padding:6px 12px;">Spécialité</th>
+                  <th style="text-align:center;font-size:13px;color:#166534;padding:6px;">Admis</th>
+                  <th style="text-align:center;font-size:13px;color:#92400e;padding:6px;">Attente</th>
+                  <th style="text-align:center;font-size:13px;color:#991b1b;padding:6px;">Ajournés</th>
+                </tr>
+                ${statsRows}
+              </table>
+            </td></tr>
+          </table>
+          ${warningBlock}
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#e8f4fd;border:1px solid #b3d9f7;border-radius:8px;margin-bottom:28px;">
+            <tr><td style="padding:14px 18px;font-size:13px;color:#0a558c;line-height:1.6;">
+              ℹ️ Pour générer les PV finaux, clôturez la session depuis votre espace.
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+            <tr><td align="center">
+              <a href="${process.env["FRONT_URL"]}/login" style="display:inline-block;background:#3014B8;color:white;text-decoration:none;padding:13px 32px;border-radius:8px;font-size:15px;font-weight:500;">
+                Accéder à la délibération →
+              </a>
+            </td></tr>
+          </table>
+          <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px;">
+          <p style="font-size:13px;color:#999;line-height:1.6;margin:0;">Cet email a été envoyé automatiquement par ConcourDoctora.</p>
+        </td></tr>
+        <tr><td style="background:#3014B8;padding:18px 40px;text-align:center;">
+          <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.7);">© 2026 ConcourDoctora · Tous droits réservés</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return {
+    subject: `Résultats de délibération — ${sessionLabel}`,
+    html,
+  };
+}
+
+// ─── DELIBERATION CANDIDATE EMAIL ─────────────────────────────────────────────
+
+export function deliberationCandidateTemplate(
+  candidateName: string,
+  sessionLabel: string,
+  specializationName: string,
+  result: AdmissionResult,
+  weightedAverage: number,
+  rank: number,
+): { subject: string; html: string } {
+  const resultColor =
+    result === "Admis(e)"
+      ? "#166534"
+      : result === "En liste d'attente"
+        ? "#92400e"
+        : "#991b1b";
+  const resultBg =
+    result === "Admis(e)"
+      ? "#dcfce7"
+      : result === "En liste d'attente"
+        ? "#fef9c3"
+        : "#fee2e2";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>* { font-family: 'Plus Jakarta Sans', Arial, sans-serif !important; }</style>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f8;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+        <tr><td style="background:#3014B8;padding:28px 40px;text-align:center;">
+          <img src="https://res.cloudinary.com/dsztqioey/image/upload/v1776104664/concour_doctora_logo_lm6aqv.png"
+               alt="ConcourDoctora" width="200" height="38" style="display:block;margin:0 auto;" />
+        </td></tr>
+        <tr><td style="padding:40px;">
+          <p style="font-size:15px;color:#444;margin:0 0 8px;">Bonjour <strong style="color:#1a1a1a;">${candidateName}</strong>,</p>
+          <h1 style="font-size:22px;color:#3014B8;margin:0 0 20px;">Résultat du concours doctoral</h1>
+          <p style="font-size:15px;color:#444;line-height:1.7;margin:0 0 24px;">
+            Nous vous informons que les résultats du concours d'accès à la formation doctorale pour la session
+            <strong style="color:#3014B8;">${sessionLabel}</strong> ont été publiés.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f3ff;border-left:4px solid #3014B8;border-radius:0 8px 8px 0;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#3014B8;text-transform:uppercase;">Votre résultat</p>
+              <table width="100%" cellpadding="6">
+                <tr>
+                  <td style="color:#666;font-size:14px;width:160px;">Spécialité</td>
+                  <td style="color:#1a1a1a;font-weight:600;font-size:14px;">${specializationName}</td>
+                </tr>
+                <tr>
+                  <td style="color:#666;font-size:14px;">Classement</td>
+                  <td style="color:#1a1a1a;font-weight:600;font-size:14px;">${rank}</td>
+                </tr>
+                <tr>
+                  <td style="color:#666;font-size:14px;">Moyenne générale</td>
+                  <td style="color:#1a1a1a;font-weight:600;font-size:14px;">${weightedAverage}/20</td>
+                </tr>
+                <tr>
+                  <td style="color:#666;font-size:14px;">Résultat</td>
+                  <td>
+                    <span style="background:${resultBg};color:${resultColor};font-size:14px;font-weight:700;padding:4px 14px;border-radius:6px;">
+                      ${result}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#e8f4fd;border:1px solid #b3d9f7;border-radius:8px;margin-bottom:28px;">
+            <tr><td style="padding:14px 18px;font-size:13px;color:#0a558c;line-height:1.6;">
+              ℹ️ Pour tout renseignement, veuillez contacter le secrétariat de votre établissement.
+            </td></tr>
+          </table>
+          <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px;">
+          <p style="font-size:13px;color:#999;line-height:1.6;margin:0;">Cet email a été envoyé automatiquement par ConcourDoctora.</p>
+        </td></tr>
+        <tr><td style="background:#3014B8;padding:18px 40px;text-align:center;">
+          <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.7);">© 2026 ConcourDoctora · Tous droits réservés</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return {
+    subject: `Résultat du concours doctoral — ${sessionLabel}`,
+    html,
+  };
+}

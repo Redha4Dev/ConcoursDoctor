@@ -439,3 +439,18 @@ export const removeStaff = asyncHandler(async (req: Request, res: Response) => {
     .status(200)
     .json({ success: true, message: "Staff removed successfully", data: null });
 });
+
+export const getSessionSurveillants = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sessionId = req.params.id as string;
+
+    const assignments =
+      await sessionsService.getSurveillantAssignmentsBySession(sessionId);
+
+    res.status(200).json({
+      success: true,
+      count: assignments.length,
+      data: assignments,
+    });
+  },
+);
