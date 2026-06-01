@@ -99,6 +99,13 @@ router.delete(
   sessionsCtrl.removeStaff,
 );
 
+router.get(
+  "/:sessionId/surveillants",
+  protect, // Ensure user is logged in
+  restrictTo("ADMIN", "COORDINATOR"), // Restrict to managers
+  sessionsCtrl.getSessionSurveillants,
+);
+
 // ─── SUBJECTS ─────────────────────────────────────────────────────────────────
 router.get("/:id/subjects", sessionsCtrl.getSubjects);
 router.post(

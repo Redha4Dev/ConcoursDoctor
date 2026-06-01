@@ -540,3 +540,28 @@ export const openSession = async (id: string) => {
     data: { status: "OPEN" },
   });
 };
+
+export const getSurveillantAssignmentsBySession = async (sessionId: string) => {
+  return identityDb.roomSurveillantAssignment.findMany({
+    where: { sessionId },
+    include: {
+      // Get the surveillant's name
+      user: {
+        select: { id: true, firstName: true, lastName: true },
+      },
+      // Get the room details
+      sessionRoom: {
+        include: {
+          room: { select: { id: true, name: true, building: true } },
+        },
+      },
+      // Get the subject details
+      subject: {
+        select: { id: true, name: true },
+      },
+    },
+    orderBy: {
+      sessionRoom: { room: { name: "asc" } },
+    },
+  });
+};
