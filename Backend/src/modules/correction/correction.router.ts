@@ -9,6 +9,7 @@ import {
   SubmitGradesSchema,
 } from "./correction.types.js";
 import * as correctionCtrl from "./correction.controller.js";
+import { restrictToSessionFunction } from "../../middleware/rbacSession.js";
 
 const router = Router();
 
@@ -25,13 +26,21 @@ router.use(protect);
  * GET /api/v1/correction/my-assignments
  * Returns sessions + subjects this corrector is assigned to.
  */
-router.get("/my-assignments", correctionCtrl.getMyAssignments);
+router.get(
+  "/my-assignments",
+  restrictToSessionFunction("CORRECTOR"),
+  correctionCtrl.getMyAssignments,
+);
 
 /**
  * GET /api/v1/correction/subjects/:subjectId/papers?sessionId=uuid
  * Lists all copies assigned to the corrector for a subject.
  */
-router.get("/subjects/:subjectId/papers", correctionCtrl.getPapersForSubject);
+router.get(
+  "/subjects/:subjectId/papers",
+  restrictToSessionFunction("CORRECTOR"),
+  correctionCtrl.getPapersForSubject,
+);
 
 /**
  * PUT /api/v1/correction/drafts
@@ -40,6 +49,7 @@ router.get("/subjects/:subjectId/papers", correctionCtrl.getPapersForSubject);
 router.put(
   "/drafts",
   validate(SaveDraftSchema),
+  restrictToSessionFunction("CORRECTOR"),
   correctionCtrl.saveDraft,
 );
 
@@ -50,6 +60,7 @@ router.put(
 router.post(
   "/subjects/:subjectId/submit",
   validate(SubmitGradesSchema),
+  restrictToSessionFunction("CORRECTOR"),
   correctionCtrl.submitGrades,
 );
 
@@ -57,7 +68,11 @@ router.post(
  * GET /api/v1/correction/copies/:copyId
  * Returns copy detail for an assigned corrector.
  */
-router.get("/copies/:copyId", correctionCtrl.getCopyDetail);
+router.get(
+  "/copies/:copyId",
+  restrictToSessionFunction("CORRECTOR"),
+  correctionCtrl.getCopyDetail,
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COORDINATOR / ADMIN ROUTES (session-scoped)
