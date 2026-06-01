@@ -33,8 +33,13 @@ export const createFormation = asyncHandler(
 );
 
 export const getFormations = asyncHandler(
-  async (_req: Request, res: Response) => {
-    const formations = await formationService.getFormations();
+  async (req: Request, res: Response) => {
+    // Extract the optional query parameter
+    const coordinatorId = req.query.coordinatorId as string | undefined;
+
+    // Pass the filter object to the service
+    const formations = await formationService.getFormations({ coordinatorId });
+
     res.status(200).json({ success: true, data: formations });
   },
 );

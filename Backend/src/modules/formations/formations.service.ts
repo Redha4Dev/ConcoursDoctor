@@ -56,8 +56,14 @@ export const createFormation = async (
   });
 };
 
-export const getFormations = async () => {
+export const getFormations = async (filters?: { coordinatorId?: string }) => {
   return identityDb.doctoralFormation.findMany({
+    where: {
+      // Conditionally apply the filter only if coordinatorId is provided
+      ...(filters?.coordinatorId
+        ? { coordinatorId: filters.coordinatorId }
+        : {}),
+    },
     include: {
       coordinator: { select: { id: true, firstName: true, lastName: true } },
       specializations: { where: { isActive: true } },
