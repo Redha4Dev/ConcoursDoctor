@@ -658,7 +658,7 @@ export const getPapersForSubject = async (
   // Fetch subject info from identity DB
   const subject = await identityDb.subject.findUnique({
     where: { id: subjectId },
-    select: { name: true, maxGrade: true, minimumGrade: true },
+    select: { name: true, maxGrade: true },
   });
   if (!subject) throw new AppError("Subject not found", 404);
 
@@ -678,7 +678,6 @@ export const getPapersForSubject = async (
     papers,
     subjectName: subject.name,
     maxGrade: subject.maxGrade,
-    minimumGrade: subject.minimumGrade,
   };
 };
 
@@ -984,7 +983,7 @@ export const getCopyDetail = async (correctorId: string, copyId: string) => {
   // ── 2. Fetch subject info from identity DB ─────────────────────────────────
   const subject = await identityDb.subject.findUnique({
     where: { id: assignment.subjectId },
-    select: { name: true, maxGrade: true, minimumGrade: true },
+    select: { name: true, maxGrade: true },
   });
   if (!subject) throw new AppError("Subject not found", 404);
 
@@ -999,7 +998,6 @@ export const getCopyDetail = async (correctorId: string, copyId: string) => {
     anonymousCode: copy.anonymousCode,
     subjectName: subject.name,
     maxGrade: subject.maxGrade,
-    minimumGrade: subject.minimumGrade,
     status: copy.status,
     myDraftGrade: myDraft?.grade ?? null,
     mySubmittedGrade: myGrade?.grade ?? null,
