@@ -623,8 +623,10 @@ export const getPapersForSubject = async (
   // Verify corrector is assigned to this subject in this session
   const assignments = await correctionDb.correctorAssignment.findMany({
     where: { correctorId, subjectId, sessionId },
-    select: { copyId: true },
+    select: { copyId: true, round: true },
   });
+
+  const roundMap = new Map(assignments.map((a) => [a.copyId, a.round]));
 
   if (assignments.length === 0) {
     throw new AppError(
@@ -668,6 +670,7 @@ export const getPapersForSubject = async (
       copyId: copy.id,
       anonymousCode: copy.anonymousCode,
       status: copy.status,
+      round: roundMap.get(copy.id) ?? null,
       draftGrade: draftMap.get(copy.id) ?? null,
       isLocked: sub?.isLocked ?? false,
       submittedGrade: sub?.grade ?? null,
@@ -695,7 +698,7 @@ export const saveDraft = async (
   // ── 1. Verify corrector is assigned to this copy ───────────────────────────
   const assignment = await correctionDb.correctorAssignment.findFirst({
     where: { copyId, correctorId },
-    select: { subjectId: true },
+    select: { subjectId: true, round: true },
   });
 
   if (!assignment) {
@@ -711,6 +714,20 @@ export const saveDraft = async (
   if (!copy) throw new AppError("Copy not found", 404);
   if (copy.status === "VALIDATED") {
     throw new AppError("Copy is already validated — cannot save draft", 400);
+  }
+
+  // ── Round availability guards ──────────────────────────────────────────────
+  if (assignment.round === 2 && copy.status !== "FIRST_DONE") {
+    throw new AppError(
+      "Round 2 correction is not available yet — round 1 has not been submitted for this copy",
+      400,
+    );
+  }
+  if (assignment.round === 3 && copy.status !== "DISCREPANCY") {
+    throw new AppError(
+      "Round 3 correction is only allowed on copies in DISCREPANCY status",
+      400,
+    );
   }
 
   // Check if this corrector has already locked a grade for this copy
@@ -979,6 +996,20 @@ export const getCopyDetail = async (correctorId: string, copyId: string) => {
   });
 
   if (!copy) throw new AppError("Copy not found", 404);
+
+  // ── Round availability guards ──────────────────────────────────────────────
+  if (assignment.round === 2 && copy.status !== "FIRST_DONE") {
+    throw new AppError(
+      "Round 2 correction is not available yet — round 1 has not been submitted for this copy",
+      400,
+    );
+  }
+  if (assignment.round === 3 && copy.status !== "DISCREPANCY") {
+    throw new AppError(
+      "Round 3 correction is only allowed on copies in DISCREPANCY status",
+      400,
+    );
+  }
 
   // ── 2. Fetch subject info from identity DB ─────────────────────────────────
   const subject = await identityDb.subject.findUnique({
