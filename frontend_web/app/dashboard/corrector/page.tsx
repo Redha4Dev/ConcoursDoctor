@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -33,6 +33,7 @@ interface ApiSession {
 interface AssignmentSummary {
   id: string;
   subjectId: string;
+  sessionId: string;
   subjectName: string;
   sessionTitle: string;
   totalCopies: number;
@@ -43,33 +44,62 @@ interface AssignmentSummary {
 export default function CorrectorDashboard() {
   const { user } = useAuth();
   const router = useRouter();
+  
   const [assignments, setAssignments] = useState<AssignmentSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
-  const date = new Date();
   const formattedDate = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(date);
+  }).format(new Date());
 
-  const fetchAssignments = useCallback(async () => {
+  // 🌟 1. Extraction des sessions uniques où l'utilisateur est assigné comme "CORRECTOR"
+  const correctorStaffEntries = user?.sessionStaff
+    ? user.sessionStaff.filter((item: any) => item.function === "CORRECTOR")
+    : [];
+
+  const uniqueSessions = Array.from(
+    new Map(
+      correctorStaffEntries
+        .filter((entry: any) => entry.session)
+        .map((entry: any) => [entry.session.id, entry.session])
+    ).values()
+  ) as any[];
+
+  // 🌟 2. Initialisation automatique de l'onglet actif sur la première session trouvée
+  useEffect(() => {
+    if (uniqueSessions.length > 0 && !activeSessionId) {
+      setActiveSessionId(uniqueSessions[0].id);
+    }
+  }, [user, uniqueSessions, activeSessionId]);
+
+  // 🌟 3. Récupération des données (Sans useCallback) avec sessionId en Query Parameter
+  const fetchAssignments = async () => {
+    if (!activeSessionId) return;
+
     try {
       setLoading(true);
-      const res = await api.get("/api/v1/correction/my-assignments");
+      
+      const res = await api.get("/api/v1/correction/my-assignments", {
+        params: { sessionId: activeSessionId } // Envoi systématique du sessionId en paramètre de requête
+      });
+      
       const data = res.data?.data ?? res.data;
       
-      // Defensively parse and flatten nested sessions -> subjects
       if (data && Array.isArray(data.sessions)) {
         const flattenedList: AssignmentSummary[] = [];
 
-        data.sessions.forEach((session: ApiSession) => {
-          if (Array.isArray(session.subjects)) {
-            session.subjects.forEach((subj: ApiSubject) => {
+        data.sessions.forEach((session: any) => {
+          // Filtrage défensif côté client pour s'assurer de ne monter que la session sélectionnée
+          if (session.sessionId === activeSessionId && Array.isArray(session.subjects)) {
+            session.subjects.forEach((subj: any) => {
               flattenedList.push({
                 id: `${session.sessionId}-${subj.subjectId}`,
                 subjectId: subj.subjectId,
+                sessionId: session.sessionId,
                 subjectName: subj.subjectName,
                 sessionTitle: session.sessionLabel,
                 totalCopies: subj.totalAssigned || 0,
@@ -90,19 +120,17 @@ export default function CorrectorDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
+  // Re-déclenchement automatique de la requête à chaque changement d'onglet
   useEffect(() => {
     fetchAssignments();
-  }, [fetchAssignments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
 
-  // --- Derived Metrics ---
-  const pendingCount = assignments.filter(
-    (a) => a.gradedCopies < a.totalCopies
-  ).length;
-  const completedCount = assignments.filter(
-    (a) => a.gradedCopies === a.totalCopies && a.totalCopies > 0
-  ).length;
+  // --- Métriques Dérivées ---
+  const pendingCount = assignments.filter((a) => a.gradedCopies < a.totalCopies).length;
+  const completedCount = assignments.filter((a) => a.gradedCopies === a.totalCopies && a.totalCopies > 0).length;
   const totalCopies = assignments.reduce((s, a) => s + a.totalCopies, 0);
   const gradedCopies = assignments.reduce((s, a) => s + a.gradedCopies, 0);
 
@@ -134,6 +162,25 @@ export default function CorrectorDashboard() {
             Mes Affectations
           </button>
         </section>
+
+        {/* 🌟 4. Barre d'onglets de navigation entre les Sessions affectées */}
+        {uniqueSessions.length > 0 && (
+          <div className="flex items-center gap-2 border-b border-slate-200 w-full overflow-x-auto pb-px">
+            {uniqueSessions.map((session) => (
+              <button
+                key={session.id}
+                onClick={() => setActiveSessionId(session.id)}
+                className={`px-4 py-2.5 font-semibold text-[14px] whitespace-nowrap border-b-2 transition-colors ${
+                  activeSessionId === session.id
+                    ? "border-[#3014B8] text-[#3014B8]"
+                    : "border-transparent text-[#64748B] hover:text-[#0F172A]"
+                }`}
+              >
+                {session.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── Stats Cards Grid ────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full">
@@ -187,7 +234,7 @@ export default function CorrectorDashboard() {
         <section className="flex flex-col gap-4 w-full">
           <div className="flex items-center justify-between">
             <h2 className="text-[20px] font-bold text-[#0F172A]">
-              Épreuves récentes
+              Épreuves de la session active
             </h2>
             <button
               onClick={() => router.push("/dashboard/corrector/assignments")}
@@ -216,7 +263,7 @@ export default function CorrectorDashboard() {
                     key={a.id}
                     onClick={() =>
                       router.push(
-                        `/dashboard/corrector/assignments/${a.subjectId}`
+                        `/dashboard/corrector/assignments/${activeSessionId}/${a.subjectId}`
                       )
                     }
                     className="flex items-center gap-5 w-full bg-white rounded-xl border border-slate-100 px-6 py-4 hover:shadow-md hover:border-[#3014B8]/10 transition-all group text-left"
@@ -267,7 +314,7 @@ export default function CorrectorDashboard() {
                 Aucune affectation
               </h3>
               <p className="text-[14px] text-[#94A3B8] max-w-sm mt-2">
-                Vous n'avez aucune épreuve assignée pour le moment. Les
+                Vous n'avez aucune épreuve assignée pour cette session. Les
                 nouvelles affectations apparaîtront ici automatiquement.
               </p>
             </div>
