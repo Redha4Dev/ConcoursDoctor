@@ -463,9 +463,9 @@ export function deliberationCoordinatorTemplate(
           <p style="font-size:15px;color:#444;margin:0 0 8px;">Bonjour <strong style="color:#1a1a1a;">${coordinatorName}</strong>,</p>
           <h1 style="font-size:22px;color:#3014B8;margin:0 0 20px;">Résultats de délibération disponibles</h1>
           <p style="font-size:15px;color:#444;line-height:1.7;margin:0 0 24px;">
-            La délibération pour la session <strong style="color:#3014B8;">${sessionLabel}</strong> a été calculée.
-            Veuillez trouver ci-dessous le récapitulatif des résultats.
-          </p>
+  La délibération pour la session <strong style="color:#3014B8;">${sessionLabel}</strong> a été calculée.
+  Veuillez trouver <strong>ci-joint le fichier Excel</strong> contenant le classement détaillé, ainsi que le récapitulatif global ci-dessous.
+</p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f3ff;border-left:4px solid #3014B8;border-radius:0 8px 8px 0;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#3014B8;text-transform:uppercase;">Récapitulatif par spécialité</p>

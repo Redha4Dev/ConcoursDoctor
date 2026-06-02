@@ -10,18 +10,20 @@ export const sendEmail = async ({
   emailto,
   subject,
   html,
+  attachments, // Cleaned up destructuring
 }: {
   emailto: string;
   subject: string;
-
   html: string;
+  attachments?: { name: string; content: string }[]; // content must be base64
 }): Promise<void> => {
   try {
     const result = await client.transactionalEmails.sendTransacEmail({
-      sender: { email: process.env.EMAIL_SENDER, name: "ConcourDoctora" },
+      sender: { email: process.env.EMAIL_SENDER!, name: "ConcourDoctora" },
       to: [{ email: emailto }],
       subject,
       htmlContent: html,
+      attachment: attachments, // <-- Pass the array to Brevo here
     });
 
     console.log("Email sent successfully:", result);

@@ -759,7 +759,9 @@ async function generatePvNominatif(
 // ─── PUBLIC SERVICE ───────────────────────────────────────────────────────────
 
 export const deliberationService = {
-  async compute(sessionId: string): Promise<ComputeDeliberationResponse> {
+  async compute(
+    sessionId: string,
+  ): Promise<ComputeDeliberationResponse & { fileBase64?: string }> {
     const session = await identityDb.competitionSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -798,6 +800,7 @@ export const deliberationService = {
       data: { status: "DELIBERATION" },
     });
 
+    // Generates the file and returns the local server path
     const xlsxPath = await generateXlsx(
       sessionId,
       session.label,
@@ -805,22 +808,44 @@ export const deliberationService = {
       results,
     );
 
-    // ── Send coordinator email ────────────────────────────────────────────────
+    const fileBase64 = fs.readFileSync(xlsxPath).toString("base64");
+    const filename = path.basename(xlsxPath);
+
+    // 2. Send coordinator email
     let emailSent = false;
     const coord = session.formation.coordinator;
+
     if (coord?.email) {
       const { subject, html } = deliberationCoordinatorTemplate(
         `${coord.firstName} ${coord.lastName}`,
         session.label,
         stats,
       );
-      await sendEmail({ emailto: coord.email, subject, html });
+
+      await sendEmail({
+        emailto: coord.email,
+        subject,
+        html,
+        attachments: [
+          {
+            name: filename, // e.g., "Deliberation_Session123.xlsx"
+            content: fileBase64, // The Base64 string Brevo expects
+          },
+        ],
+      });
       emailSent = true;
     }
 
-    return { sessionId, results, stats, xlsxPath, emailSent };
+    // 3. Return the payload
+    return {
+      sessionId,
+      results,
+      stats,
+      xlsxPath,
+      emailSent,
+      fileBase64, // Send the same string to the frontend!
+    };
   },
-
   async getRanking(
     sessionId: string,
     specializationId?: string,
