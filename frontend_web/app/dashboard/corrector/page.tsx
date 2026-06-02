@@ -56,7 +56,7 @@ export default function CorrectorDashboard() {
     year: "numeric",
   }).format(new Date());
 
-  // 🌟 1. Extraction des sessions uniques où l'utilisateur est assigné comme "CORRECTOR"
+  // 🌟 1. Extraction of unique sessions where the user is assigned as "CORRECTOR"
   const correctorStaffEntries = user?.sessionStaff
     ? user.sessionStaff.filter((item: any) => item.function === "CORRECTOR")
     : [];
@@ -69,14 +69,14 @@ export default function CorrectorDashboard() {
     ).values()
   ) as any[];
 
-  // 🌟 2. Initialisation automatique de l'onglet actif sur la première session trouvée
+  // 🌟 2. Automatic initialization of the active tab to the first found session
   useEffect(() => {
     if (uniqueSessions.length > 0 && !activeSessionId) {
       setActiveSessionId(uniqueSessions[0].id);
     }
   }, [user, uniqueSessions, activeSessionId]);
 
-  // 🌟 3. Récupération des données (Sans useCallback) avec sessionId en Query Parameter
+  // 🌟 3. Data fetching (Without useCallback) with sessionId as Query Parameter
   const fetchAssignments = async () => {
     if (!activeSessionId) return;
 
@@ -84,7 +84,7 @@ export default function CorrectorDashboard() {
       setLoading(true);
       
       const res = await api.get("/api/v1/correction/my-assignments", {
-        params: { sessionId: activeSessionId } // Envoi systématique du sessionId en paramètre de requête
+        params: { sessionId: activeSessionId } // Always send sessionId as query parameter
       });
       
       const data = res.data?.data ?? res.data;
@@ -93,7 +93,7 @@ export default function CorrectorDashboard() {
         const flattenedList: AssignmentSummary[] = [];
 
         data.sessions.forEach((session: any) => {
-          // Filtrage défensif côté client pour s'assurer de ne monter que la session sélectionnée
+          // Defensive client-side filtering to ensure only the selected session is loaded
           if (session.sessionId === activeSessionId && Array.isArray(session.subjects)) {
             session.subjects.forEach((subj: any) => {
               flattenedList.push({
@@ -122,13 +122,13 @@ export default function CorrectorDashboard() {
     }
   };
 
-  // Re-déclenchement automatique de la requête à chaque changement d'onglet
+  // Automatic re-fetch when switching tabs
   useEffect(() => {
     fetchAssignments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
-  // --- Métriques Dérivées ---
+  // --- Derived Metrics ---
   const pendingCount = assignments.filter((a) => a.gradedCopies < a.totalCopies).length;
   const completedCount = assignments.filter((a) => a.gradedCopies === a.totalCopies && a.totalCopies > 0).length;
   const totalCopies = assignments.reduce((s, a) => s + a.totalCopies, 0);
@@ -148,7 +148,7 @@ export default function CorrectorDashboard() {
               {formattedDate}
             </p>
             <h1 className="font-bold text-[36px] leading-[45px] text-[#0F172A]">
-              Bienvenue, {user?.firstName || "Correcteur"}
+              Welcome, {user?.firstName || "Corrector"}
             </h1>
           </header>
           <button
@@ -159,11 +159,11 @@ export default function CorrectorDashboard() {
             }}
           >
             <ClipboardList size={16} />
-            Mes Affectations
+            My Assignments
           </button>
         </section>
 
-        {/* 🌟 4. Barre d'onglets de navigation entre les Sessions affectées */}
+        {/* 🌟 4. Navigation tabs for assigned sessions */}
         {uniqueSessions.length > 0 && (
           <div className="flex items-center gap-2 border-b border-slate-200 w-full overflow-x-auto pb-px">
             {uniqueSessions.map((session) => (
@@ -191,7 +191,7 @@ export default function CorrectorDashboard() {
             </div>
             <div>
               <p className="text-[11px] text-[#94A3B8] font-bold uppercase tracking-wider">
-                En attente
+                Pending
               </p>
               <h2 className="text-[28px] font-bold text-[#0F172A] leading-tight">
                 {loading ? "—" : pendingCount}
@@ -206,7 +206,7 @@ export default function CorrectorDashboard() {
             </div>
             <div>
               <p className="text-[11px] text-[#94A3B8] font-bold uppercase tracking-wider">
-                Terminées
+                Completed
               </p>
               <h2 className="text-[28px] font-bold text-[#0F172A] leading-tight">
                 {loading ? "—" : completedCount}
@@ -221,7 +221,7 @@ export default function CorrectorDashboard() {
             </div>
             <div className="flex-1">
               <p className="text-[11px] text-[#94A3B8] font-bold uppercase tracking-wider">
-                Copies notées
+                Graded Copies
               </p>
               <h2 className="text-[28px] font-bold text-[#0F172A] leading-tight">
                 {loading ? "—" : `${gradedCopies} / ${totalCopies}`}
@@ -234,13 +234,13 @@ export default function CorrectorDashboard() {
         <section className="flex flex-col gap-4 w-full">
           <div className="flex items-center justify-between">
             <h2 className="text-[20px] font-bold text-[#0F172A]">
-              Épreuves de la session active
+              Active session exams
             </h2>
             <button
               onClick={() => router.push("/dashboard/corrector/assignments")}
               className="text-[13px] font-semibold text-[#3014B8] hover:underline flex items-center gap-1"
             >
-              Tout voir <ChevronRight size={14} />
+              View all <ChevronRight size={14} />
             </button>
           </div>
 
@@ -295,7 +295,7 @@ export default function CorrectorDashboard() {
 
                     {a.isLocked && (
                       <span className="px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[10px] font-bold text-[#15803D] uppercase tracking-wider shrink-0">
-                        Validé
+                        Validated
                       </span>
                     )}
 
@@ -311,11 +311,11 @@ export default function CorrectorDashboard() {
             <div className="bg-white border border-[#3014B8]/[0.06] rounded-2xl p-10 flex flex-col items-center justify-center text-center shadow-[0px_4px_20px_rgba(0,0,0,0.03)]">
               <ClipboardList size={44} className="text-[#CBD5E1] mb-4" />
               <h3 className="text-[17px] font-bold text-[#0F172A]">
-                Aucune affectation
+                No assignments
               </h3>
               <p className="text-[14px] text-[#94A3B8] max-w-sm mt-2">
-                Vous n'avez aucune épreuve assignée pour cette session. Les
-                nouvelles affectations apparaîtront ici automatiquement.
+                You have no assigned exams for this session. New assignments will
+                appear here automatically.
               </p>
             </div>
           )}

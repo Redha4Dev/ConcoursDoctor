@@ -11,7 +11,9 @@ import {
   AlertTriangle,
   TrendingUp,
   UserPlus,
-  ShieldCheck
+  ShieldCheck,
+  X,
+  GanttChartSquare
 } from "lucide-react";
 
 // --- TypeScript Interfaces ---
@@ -19,11 +21,11 @@ interface SubjectProgress {
   subjectId: string;
   subjectLabel: string;
   totalCopies: number;
-  ungraded: number;     // Grey
-  round1Done: number;   // Yellow
-  round2Done: number;   // Blue
-  validated: number;    // Green
-  discrepancy: number;  // Red
+  ungraded: number;     
+  round1Done: number;   
+  round2Done: number;   
+  validated: number;    
+  discrepancy: number;  
 }
 
 interface DiscrepancyCopy {
@@ -34,10 +36,15 @@ interface DiscrepancyCopy {
   grade1: number;
   grade2: number;
   gap: number;
-  eligibleCorrectors: {
-    id: string;
-    name: string;
-  }[];
+}
+
+interface EligibleCorrector {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  institution: string;
+  academicGrade: string;
 }
 
 export default function CorrectionTab() {
@@ -51,14 +58,18 @@ export default function CorrectionTab() {
   // Data Loading States
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingEligible, setIsFetchingEligible] = useState(false);
   const [assigningThirdId, setAssigningThirdId] = useState<string | null>(null);
   
-  // Modal Control
+  // Modal Control States
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [arbitrationModalCopy, setArbitrationModalCopy] = useState<DiscrepancyCopy | null>(null);
+  const [selectedThirdCorrectorId, setSelectedThirdCorrectorId] = useState<string>("");
 
   // Core Feature Data States
   const [progressData, setProgressData] = useState<SubjectProgress[]>([]);
   const [discrepancies, setDiscrepancies] = useState<DiscrepancyCopy[]>([]);
+  const [eligibleCorrectors, setEligibleCorrectors] = useState<EligibleCorrector[]>([]);
 
   // --- API Data Fetching Fetcher ---
   const fetchCorrectionDashboardData = async () => {
@@ -66,12 +77,10 @@ export default function CorrectionTab() {
     try {
       setIsLoading(true);
       
-      // 1. Get fundamental session configuration/status
       const sessionRes = await api.get(`/api/v1/sessions/${sessionId}`);
       const currentStatus = sessionRes.data?.data?.status || "DRAFT";
       setSessionStatus(currentStatus);
 
-      // 2. Fetch Live Progress Distribution Breakdown
       const progressRes = await api.get(`/api/v1/correction/${sessionId}/progress`);
       if (progressRes.data?.success) {
         setProgressData(progressRes.data.data?.subjects || []);
@@ -81,7 +90,6 @@ export default function CorrectionTab() {
         });
       }
 
-      // 3. Fetch Third Corrector Conflict Discrepancies with Strict Defensive Checking
       const discrepanciesRes = await api.get(`/api/v1/correction/${sessionId}/discrepancies`);
       if (discrepanciesRes.data?.success) {
         const incomingData = discrepanciesRes.data.data;
@@ -93,16 +101,34 @@ export default function CorrectionTab() {
         } else if (incomingData && Array.isArray(incomingData.copies)) {
           setDiscrepancies(incomingData.copies);
         } else {
-          setDiscrepancies([]); // Fallback safety net if structural keys match nothing
+          setDiscrepancies([]); 
         }
       } else {
         setDiscrepancies([]);
       }
+
     } catch (error) {
       console.error("Error reading initial correction state layouts:", error);
-      setDiscrepancies([]); // Ensure state remains an array on failure
+      setDiscrepancies([]); 
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- Fetch Eligible Correctors for a specific Copy ---
+  const fetchEligibleCorrectors = async (copyId: string) => {
+    try {
+      setIsFetchingEligible(true);
+      setEligibleCorrectors([]); // Reset list during load
+      const res = await api.get(`/api/v1/correction/${sessionId}/copies/${copyId}/eligible-correctors`);
+      console.log(res)
+      if (res.data?.success && res.data?.data?.eligibleCorrectors) {
+        setEligibleCorrectors(res.data.data.eligibleCorrectors);
+      }
+    } catch (error) {
+      console.error("Failed to fetch copy specific eligible correctors:", error);
+    } finally {
+      setIsFetchingEligible(false);
     }
   };
 
@@ -110,7 +136,7 @@ export default function CorrectionTab() {
     fetchCorrectionDashboardData();
   }, [sessionId]);
 
-  // --- Action Transmitters ---
+  // --- Actions ---
   const handleOpenCorrectionGate = async () => {
     try {
       setIsSubmitting(true);
@@ -128,16 +154,21 @@ export default function CorrectionTab() {
     }
   };
 
-  const handleAssignThirdCorrector = async (copyId: string, correctorId: string) => {
-    if (!correctorId) return;
+  const handleAssignThirdCorrectorSubmit = async () => {
+    if (!arbitrationModalCopy || !selectedThirdCorrectorId) return;
+    const copyId = arbitrationModalCopy.copyId;
+    
     try {
       setAssigningThirdId(copyId);
       const response = await api.post(`/api/v1/correction/${sessionId}/copies/${copyId}/assign-third`, {
-        thirdCorrectorId: correctorId
+        correctorId: selectedThirdCorrectorId
       });
+      console.log(response);
+      
       if (response.data?.success) {
-        // Clear localized structural item out of local state
         setDiscrepancies(prev => prev.filter(item => item.copyId !== copyId));
+        setArbitrationModalCopy(null); 
+        setSelectedThirdCorrectorId("");
         fetchCorrectionDashboardData();
       }
     } catch (error) {
@@ -150,17 +181,14 @@ export default function CorrectionTab() {
   return (
     <div className="flex flex-col gap-8 w-full font-sans text-[#1E293B]">
       
-      {/* Absolute Core Global Processing Loader */}
       {isLoading && (
         <div className="absolute inset-0 z-50 bg-white/60 backdrop-blur-[1px] flex items-center justify-center rounded-2xl">
           <Loader2 className="animate-spin text-[#3014B8]" size={40} />
         </div>
       )}
 
-      {/* TOP REGION: Gatekeeper Action & Performance Readouts */}
+      {/* TOP REGION */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
-        
-        {/* 1. THE OPEN CORRECTION GATEKEEPER PANEL */}
         <div className="bg-white rounded-2xl p-8 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-start mb-4">
@@ -205,7 +233,6 @@ export default function CorrectionTab() {
           </div>
         </div>
 
-        {/* METRIC SUMMARIES */}
         <div className="bg-white rounded-2xl p-8 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 flex flex-col justify-between">
           <div>
             <div className="w-10 h-10 bg-indigo-50 text-[#3014B8] rounded-xl flex items-center justify-center mb-4">
@@ -237,7 +264,7 @@ export default function CorrectionTab() {
         </div>
       </div>
 
-      {/* MID REGION: LIVE PROGRESS DASHBOARD */}
+      {/* MID REGION */}
       <div className="bg-white rounded-2xl p-8 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 w-full">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
@@ -250,7 +277,6 @@ export default function CorrectionTab() {
             </div>
           </div>
           
-          {/* Legend labels */}
           <div className="flex flex-wrap items-center gap-4 text-[11px] font-bold uppercase tracking-tight">
             <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-slate-200 rounded-sm inline-block" /> Non Noté</div>
             <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-amber-400 rounded-sm inline-block" /> Correction 1</div>
@@ -281,7 +307,6 @@ export default function CorrectionTab() {
                     <span className="text-[12px] font-medium text-slate-400">{subject.totalCopies} copies totales</span>
                   </div>
                   
-                  {/* Stacked Percentage Progress Bar Segment */}
                   <div className="w-full h-4 bg-slate-100 rounded-full flex overflow-hidden">
                     <div style={{ width: `${pUngraded}%` }} className="bg-slate-200 h-full transition-all" title={`Non noté: ${subject.ungraded}`} />
                     <div style={{ width: `${pR1}%` }} className="bg-amber-400 h-full transition-all" title={`Correction 1: ${subject.round1Done}`} />
@@ -296,7 +321,7 @@ export default function CorrectionTab() {
         </div>
       </div>
 
-      {/* LOWER REGION: THE DISCREPANCY RESOLUTION CENTER */}
+      {/* LOWER REGION */}
       <div className="bg-white rounded-2xl p-8 shadow-[0px_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 w-full">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-rose-50 rounded-lg text-rose-600">
@@ -317,7 +342,7 @@ export default function CorrectionTab() {
                 <th className="py-4 px-4 text-center">Note 1</th>
                 <th className="py-4 px-4 text-center">Note 2</th>
                 <th className="py-4 px-4 text-center">Écart (Gap)</th>
-                <th className="py-4 px-4 text-right">Troisième Correcteur (Arbitre)</th>
+                <th className="py-4 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-[14px]">
@@ -328,53 +353,45 @@ export default function CorrectionTab() {
                   </td>
                 </tr>
               ) : (
-                discrepancies.map((item) => (
-                  <tr key={item.copyId} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-4 px-4 font-mono font-bold text-slate-700">{item.anonymousCode}</td>
-                    <td className="py-4 px-4 font-medium text-slate-600">{item.subjectLabel}</td>
-                    <td className="py-4 px-4 text-center font-semibold text-slate-500">
-                      {typeof item.grade1 === "number" ? item.grade1.toFixed(2) : item.grade1}
-                    </td>
-                    <td className="py-4 px-4 text-center font-semibold text-slate-500">
-                      {typeof item.grade2 === "number" ? item.grade2.toFixed(2) : item.grade2}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className="bg-rose-50 text-rose-600 font-bold px-2.5 py-1 rounded-md text-[13px] border border-rose-100">
-                        {typeof item.gap === "number" ? item.gap.toFixed(2) : item.gap} pts
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <div className="inline-flex items-center gap-2 relative max-w-xs w-full justify-end">
-                        {assigningThirdId === item.copyId ? (
-                          <Loader2 className="animate-spin text-[#3014B8]" size={16} />
-                        ) : (
-                          <div className="relative w-56">
-                            <select
-                              defaultValue=""
-                              onChange={(e) => handleAssignThirdCorrector(item.copyId, e.target.value)}
-                              className="w-full bg-[#F1F5F9] border-none rounded-lg py-2 px-3 text-[12px] font-bold text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-[#3014B8]/20 transition-all pr-8"
-                            >
-                              <option value="" disabled hidden>Assigner Correcteur 3...</option>
-                              {item.eligibleCorrectors?.map((corr) => (
-                                <option key={corr.id} value={corr.id}>
-                                  {corr.name}
-                                </option>
-                              ))}
-                            </select>
-                            <UserPlus size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                discrepancies.map((item) => {
+                  return (
+                    <tr key={item.copyId} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 px-4 font-mono font-bold text-slate-700">{item.anonymousCode}</td>
+                      <td className="py-4 px-4 font-medium text-slate-600">{item.subjectLabel}</td>
+                      <td className="py-4 px-4 text-center font-semibold text-slate-500">
+                        {typeof item.grade1 === "number" ? item.grade1.toFixed(2) : item.grade1}
+                      </td>
+                      <td className="py-4 px-4 text-center font-semibold text-slate-500">
+                        {typeof item.grade2 === "number" ? item.grade2.toFixed(2) : item.grade2}
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        <span className="bg-rose-50 text-rose-600 font-bold px-2.5 py-1 rounded-md text-[13px] border border-rose-100">
+                          {typeof item.gap === "number" ? item.gap.toFixed(2) : item.gap} pts
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <button
+                          onClick={() => {
+                            setArbitrationModalCopy(item);
+                            setSelectedThirdCorrectorId("");
+                            fetchEligibleCorrectors(item.copyId); // Trigger precise fetching
+                          }}
+                          className="bg-slate-100 hover:bg-[#3014B8] hover:text-white transition-all text-slate-600 px-4 py-2 rounded-xl text-[12px] font-bold inline-flex items-center gap-1.5"
+                        >
+                          <UserPlus size={14} />
+                          Arbitrer la copie
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* --- CONFIRMATION UX GATEWAY MODAL --- */}
+      {/* --- CONFIRMATION EXAM START MODAL --- */}
       {isConfirmModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
@@ -415,6 +432,108 @@ export default function CorrectionTab() {
                 {isSubmitting ? "Lancement..." : "Confirmer et Ouvrir"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- THIRD CORRECTOR ARBITRATION POPUP MODAL --- */}
+      {arbitrationModalCopy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 max-w-lg w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200 relative">
+            
+            <button 
+              onClick={() => setArbitrationModalCopy(null)}
+              className="absolute right-6 top-6 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3 text-rose-600 mb-4">
+              <GanttChartSquare size={26} />
+              <h3 className="text-[20px] font-bold text-[#1E293B]">Désignation du Troisième Correcteur</h3>
+            </div>
+
+            <p className="text-[13px] text-slate-400 leading-relaxed mb-6">
+              Sélectionnez un membre du jury qualifié pour trancher le litige de notation sur cette copie spécifique.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-6 grid grid-cols-2 gap-4 text-[13px]">
+              <div>
+                <span className="text-slate-400 block mb-0.5">Code Anonyme :</span>
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200/60 inline-block">
+                  {arbitrationModalCopy.anonymousCode}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block mb-0.5">Épreuve / Matière :</span>
+                <span className="font-bold text-slate-700">{arbitrationModalCopy.subjectLabel}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block mb-0.5">Écart constaté :</span>
+                <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 inline-block">
+                  {arbitrationModalCopy.gap} points
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block mb-0.5">Notes (R1 / R2) :</span>
+                <span className="font-medium text-slate-600">{arbitrationModalCopy.grade1} / {arbitrationModalCopy.grade2}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mb-8">
+              <label className="text-[12px] font-bold text-[#1E293B] uppercase tracking-wider flex items-center gap-2">
+                Enseignants disponibles pour cette épreuve
+                {isFetchingEligible && <Loader2 size={14} className="animate-spin text-[#3014B8]" />}
+              </label>
+              
+              <div className="relative">
+                <select
+                  value={selectedThirdCorrectorId}
+                  onChange={(e) => setSelectedThirdCorrectorId(e.target.value)}
+                  disabled={isFetchingEligible}
+                  className="w-full bg-[#F1F5F9] focus:bg-white border-2 border-transparent focus:border-[#3014B8]/20 rounded-xl py-3.5 px-4 text-[14px] font-semibold text-slate-700 appearance-none outline-none transition-all pr-10 disabled:opacity-60"
+                >
+                  {isFetchingEligible ? (
+                    <option value="" disabled>Recherche des correcteurs éligibles...</option>
+                  ) : (
+                    <>
+                      <option value="" disabled>Choisir un enseignant arbitre...</option>
+                      {eligibleCorrectors.map((corr) => (
+                        <option key={corr.userId} value={corr.userId}>
+                          {`${corr.firstName} ${corr.lastName}`.trim()} ({corr.academicGrade || "Enseignant"}) — {corr.institution}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                <UserPlus size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+
+              {!isFetchingEligible && eligibleCorrectors.length === 0 && (
+                <p className="text-[12px] text-rose-600 font-medium flex items-center gap-1 mt-1">
+                  <AlertTriangle size={14} /> Aucun correcteur éligible trouvé (tous les correcteurs restants ont déjà évalué cette copie ou ne font pas partie de cette matière).
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-4 border-t border-slate-100 pt-5">
+              <button
+                onClick={() => setArbitrationModalCopy(null)}
+                disabled={assigningThirdId === arbitrationModalCopy.copyId}
+                className="text-[14px] font-bold text-slate-400 hover:text-slate-600 px-4 py-2 transition-colors disabled:opacity-50"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={handleAssignThirdCorrectorSubmit}
+                disabled={!selectedThirdCorrectorId || assigningThirdId === arbitrationModalCopy.copyId || isFetchingEligible}
+                className="bg-[#3014B8] hover:bg-[#250f96] disabled:bg-slate-100 disabled:text-slate-400 transition-colors text-white px-6 py-3.5 rounded-xl text-[14px] font-bold flex items-center gap-2 disabled:cursor-not-allowed shadow-sm"
+              >
+                {assigningThirdId === arbitrationModalCopy.copyId && <Loader2 size={16} className="animate-spin" />}
+                {assigningThirdId === arbitrationModalCopy.copyId ? "Assignation..." : "Valider l'Assignation"}
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -46,9 +46,11 @@ const handleBarCodeScanned = async ({ type, data }) => {
       const response = await api.get(`/api/v1/anonymization/${sessionId}/lookup`, {
         params: { qrCode: data },
       });
+      console.log(response.data);
 
-      if (response.data && response.data.success) {
+      if (response.data.data ) {
         setScanResult(response.data.data);
+        console.log("Anonymous Code:", response.data.data.anonymousCode);
       } else {
         throw new Error(response.data?.message || "Invalid QR Code");
       }
@@ -201,7 +203,7 @@ const handleBarCodeScanned = async ({ type, data }) => {
             <View className="flex-row mb-6">
               <Text className="text-[#6B7280] font-bold text-[15px] mr-2">Subject:</Text>
               <Text className="text-[#1F2937] font-black text-[15px] flex-1">
-                {scanResult?.subjectCode || "ACSI"}
+                {scanResult?.subjectName}
               </Text>
             </View>
 
@@ -211,8 +213,8 @@ const handleBarCodeScanned = async ({ type, data }) => {
             
             {/* Code Block */}
             <View className="bg-[#E5E7EB] py-4 rounded-[20px] items-center justify-center">
-              <Text className="text-[#311B92] text-[24px] font-black tracking-widest">
-                {scanResult?.anonymityCode || "PHD-7X2A-99"}
+              <Text className="text-[#311B92] text-[20px] font-black tracking-widest">
+                {scanResult?.anonymousCode}
               </Text>
             </View>
           </View>

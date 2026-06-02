@@ -11,14 +11,28 @@ import ExamSettings from "@/components/dashboard/session/SettingsTab";
 import SpecializationTab from "@/components/dashboard/session/SpecializationTab";
 import AnonymatSettings from "@/components/dashboard/session/AonymatTab";
 import CorrectionTab from "@/components/dashboard/session/CorrectionTab";
+import DeliberationTab from "@/components/dashboard/session/DeliberationTab"; // <-- Added Import
 
 // Tab type translations
-type TabType = "Candidates" | "Subjects" | "Staff" | "Rooms" | "Specialization" | "Anonymat" | "Correction" | "Settings"; // <-- Added "Correction"
+type TabType = 
+  | "Candidates" 
+  | "Subjects" 
+  | "Staff" 
+  | "Rooms" 
+  | "Specialization" 
+  | "Anonymat" 
+  | "Correction" 
+  | "Deliberation" // <-- Added "Deliberation"
+  | "Settings"; 
 
 export default function SessionPage() {
   const router = useRouter();
   const params = useParams();
+  
+  // Extracting IDs safely depending on how your dynamic routes are structured
   const programId = params?.id as string;
+  const sessionId = (params?.sessionId || params?.id) as string; 
+
   const [activeTab, setActiveTab] = useState<TabType>("Candidates");
 
   const TABS: TabType[] = [
@@ -28,7 +42,8 @@ export default function SessionPage() {
     "Rooms",
     "Specialization",
     "Anonymat",
-    "Correction", // <-- Added to navigation layout
+    "Correction",
+    "Deliberation", // <-- Added to navigation layout
     "Settings",
   ];
 
@@ -77,7 +92,7 @@ export default function SessionPage() {
               }`}
               style={{ fontFamily: "'Google Sans', sans-serif" }}
             >
-              {tab === "Anonymat" ? "Anonymat" : tab === "Correction" ? "Correction" : tab}
+              {tab}
             </button>
           ))}
         </div>
@@ -91,7 +106,8 @@ export default function SessionPage() {
         {activeTab === "Rooms" && <RoomDirectory />} 
         {activeTab === "Specialization" && <SpecializationTab />}
         {activeTab === "Anonymat" && <AnonymatSettings />}
-        {activeTab === "Correction" && <CorrectionTab />} {/* <-- Added View Mapping */}
+        {activeTab === "Correction" && <CorrectionTab />} 
+        {activeTab === "Deliberation" && <DeliberationTab sessionId={sessionId} />} {/* <-- Added View Mapping */}
         {activeTab === "Settings" && <ExamSettings />}
       </div>
     </div>
