@@ -14,24 +14,24 @@ import CorrectionTab from "@/components/dashboard/session/CorrectionTab";
 import DeliberationTab from "@/components/dashboard/session/DeliberationTab"; // <-- Added Import
 
 // Tab type translations
-type TabType = 
-  | "Candidates" 
-  | "Subjects" 
-  | "Staff" 
-  | "Rooms" 
-  | "Specialization" 
-  | "Anonymat" 
-  | "Correction" 
+type TabType =
+  | "Candidates"
+  | "Subjects"
+  | "Staff"
+  | "Rooms"
+  | "Specialization"
+  | "Anonymat"
+  | "Correction"
   | "Deliberation" // <-- Added "Deliberation"
-  | "Settings"; 
+  | "Settings";
 
 export default function SessionPage() {
   const router = useRouter();
   const params = useParams();
-  
+
   // Extracting IDs safely depending on how your dynamic routes are structured
-  const programId = params?.id as string;
-  const sessionId = (params?.sessionId || params?.id) as string; 
+  const programId = params?.formationId as string;
+  const sessionId = (params?.sessionId || params?.id) as string;
 
   const [activeTab, setActiveTab] = useState<TabType>("Candidates");
 
@@ -102,12 +102,15 @@ export default function SessionPage() {
       <div className="w-full">
         {activeTab === "Candidates" && <CandidatesTab />}
         {activeTab === "Staff" && <StaffTab />}
-        {activeTab === "Subjects" && <SubjectsPage />} 
-        {activeTab === "Rooms" && <RoomDirectory />} 
+        {activeTab === "Subjects" && <SubjectsPage />}
+        {activeTab === "Rooms" && <RoomDirectory />}
         {activeTab === "Specialization" && <SpecializationTab />}
         {activeTab === "Anonymat" && <AnonymatSettings />}
-        {activeTab === "Correction" && <CorrectionTab />} 
-        {activeTab === "Deliberation" && <DeliberationTab sessionId={sessionId} />} {/* <-- Added View Mapping */}
+        {activeTab === "Correction" && <CorrectionTab />}
+        {activeTab === "Deliberation" && (
+          <DeliberationTab sessionId={sessionId} />
+        )}{" "}
+        {/* <-- Added View Mapping */}
         {activeTab === "Settings" && <ExamSettings />}
       </div>
     </div>
