@@ -456,8 +456,11 @@ export function deliberationCoordinatorTemplate(
     <tr><td align="center" style="padding:40px 20px;">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
         <tr><td style="background:#3014B8;padding:28px 40px;text-align:center;">
-          <img src="https://res.cloudinary.com/dsztqioey/image/upload/v1776104664/concour_doctora_logo_lm6aqv.png"
-               alt="ConcourDoctora" width="200" height="38" style="display:block;margin:0 auto;" />
+           <img src="https://res.cloudinary.com/dsztqioey/image/upload/v1776104664/concour_doctora_logo_lm6aqv.png"
+               alt="ConcourDoctora"
+               width="200"
+               height="38"
+               style="display:block;margin:0 auto;" /> 
         </td></tr>
         <tr><td style="padding:40px;">
           <p style="font-size:15px;color:#444;margin:0 0 8px;">Bonjour <strong style="color:#1a1a1a;">${coordinatorName}</strong>,</p>
