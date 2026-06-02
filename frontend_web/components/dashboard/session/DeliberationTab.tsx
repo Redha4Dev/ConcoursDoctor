@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { api } from "@/lib/api"; // Adjust this import based on your actual api utility path
+import { api } from "@/lib/api";
 import { 
   Calculator, 
   Lock, 
@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  FileText,
   Mail,
   Loader2
 } from "lucide-react";
@@ -80,8 +79,8 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
   const [confirmComputeOpen, setConfirmComputeOpen] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
   
-  // Action Results (From Compute/Close)
-  const [computeResult, setComputeResult] = useState<{ excelPath?: string, emailsSent?: boolean } | null>(null);
+  // Action Results
+  const [computeResult, setComputeResult] = useState<{ emailSent?: boolean } | null>(null);
 
   // --- Fetch Initial Data ---
   const fetchRankings = async () => {
@@ -90,9 +89,6 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
       const res = await api.get(`/api/v1/deliberation/${sessionId}/ranking`);
       
       const specializationsArray = res.data?.data?.specializations || [];
-      
-      // Transform the array into our expected dictionary format
-      // Compute the missing stats (admitted, rejected, etc.) by looping over candidates
       const transformedData: Record<string, SpecializationRanking> = {};
       
       specializationsArray.forEach((spec: any) => {
@@ -102,12 +98,10 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
         const warningCandidates: WarningCandidate[] = [];
 
         candidates.forEach((c: any) => {
-          // Count statuses
           if (c.result === AdmissionResult.ADMIS) admitted++;
           else if (c.result === AdmissionResult.WAITLIST) waitlisted++;
           else rejected++;
 
-          // Identify warning candidates (e.g., missed by 0.5 points, assuming 10 is passing)
           if (c.weightedAverage >= 9.5 && c.weightedAverage < 10.0) {
             warningCandidates.push({
               registrationNumber: c.registrationNumber,
@@ -135,7 +129,6 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
 
       setRankingsData(transformedData);
       
-      // Set the first tab as active if we have data
       if (specializationsArray.length > 0 && !activeSpecId) {
         setActiveSpecId(specializationsArray[0].specializationId);
       }
@@ -162,12 +155,14 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
       const res = await api.post(`/api/v1/deliberation/${sessionId}/compute`);
       
       if (res.data?.success || res.status === 200) {
+        const payloadData = res.data?.data;
+        
         setComputeResult({
-          excelPath: res.data?.data?.excelExportPath,
-          emailsSent: res.data?.data?.emailSentStatus
+          emailSent: payloadData?.emailSent
         });
+        
         setConfirmComputeOpen(false);
-        await fetchRankings(); // Refresh data after computing
+        await fetchRankings(); 
       }
     } catch (error) {
       console.error("Computation failed:", error);
@@ -195,7 +190,7 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
     }
   };
 
-  // The unified download function for both PV types
+  // Document download handlers for Word PV documents
   const downloadPV = async (type: 'anonymat' | 'nominatif') => {
     try {
       const res = await api.get(`/api/v1/deliberation/${sessionId}/pv/${type}`, {
@@ -258,15 +253,14 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {computeResult?.emailsSent && (
+          {computeResult?.emailSent && (
             <span className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-2 rounded-xl text-[13px] font-medium border border-emerald-100">
               <Mail size={16} /> Notification envoyée
             </span>
           )}
 
-          {/* PV Download Buttons - Currently set to show only when session is CLOSED. 
-              Remove the {sessionStatus === "CLOSED" && ( wrapper if you want them always visible */}
-          {sessionStatus === "CLOSED" && (
+          {/* Word Document PVs */}
+          {activeData && (
             <>
               <button 
                 onClick={() => downloadPV('anonymat')}
@@ -506,7 +500,7 @@ export default function DeliberationTab({ sessionId, initialStatus }: { sessionI
               <h3 className="text-[20px] font-bold text-[#0F172A]">Lancer le Calcul</h3>
             </div>
             <p className="text-[14px] text-slate-500 mb-6 leading-relaxed">
-              Vous êtes sur le point de calculer les moyennes générales et d'établir le classement final pour toutes les spécialités.
+              Vous êtes sur le point de calculer les moyennes générales, d'établir le classement final, et d'exporter les grilles Excel de délibération.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button 
